@@ -4,9 +4,13 @@ import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 // Map and Style
-// TODO: Replace with your actual MapLibre style URL
-const MAP_STYLE_URL = 'https://demotiles.maplibre.org/style.json'; // Example style
-const INITIAL_CENTER: [number, number] = [-122.394, 37.795]; // SF Ferry Building (Lng, Lat)
+// Read style URL from environment variable
+const MAP_STYLE_URL = import.meta.env.VITE_MAPLIBRE_STYLE_URL;
+if (!MAP_STYLE_URL) {
+    console.error("ERROR: VITE_MAPLIBRE_STYLE_URL environment variable is not set!");
+    // Potentially fall back to a default or throw an error
+}
+const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
 const INITIAL_ZOOM = 17; // Zoom closer
 
 // Game Constants - Focus on Pixel Speed for now
@@ -88,7 +92,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
     const deltaX = velocity.current.x * dt;
     const deltaY = velocity.current.y * dt;
 
-    // --- DEBUG LOGGING ---
+    // --- DEBUG LOGGING --- (Commented out)
+    /*
     if (dx !== 0 || dy !== 0 || Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
       console.log(
         `Input:(${dx},${dy}) ` +
@@ -97,6 +102,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         `Heading: ${currentHeading.current.toFixed(2)}`
       );
     }
+    */
     // -------------------
 
     // --- Map Panning ---

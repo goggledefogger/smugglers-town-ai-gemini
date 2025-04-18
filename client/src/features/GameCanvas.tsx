@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl, { Map, LngLat } from 'maplibre-gl';
 import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { Client, Room } from 'colyseus.js'; // Import Colyseus client
 import HUD from '../components/HUD'; // Import the HUD component
 
 // Map and Style
@@ -20,6 +21,11 @@ const INITIAL_ZOOM = 17; // Zoom closer
 const MAX_SPEED_PIXELS = 250; // TUNABLE: Target pixels/second panning speed
 const ACCEL_RATE = 10; // TUNABLE: How quickly we reach max speed (higher = faster)
 const TURN_SMOOTH = 12;
+
+// Colyseus Endpoint
+const COLYSEUS_ENDPOINT = process.env.NODE_ENV === 'production'
+    ? 'wss://your-production-colyseus-url' // TODO: Replace with your deployed server URL
+    : 'ws://localhost:2567'; // Local development server
 
 // --- Helper Functions ---
 function lerp(start: number, end: number, factor: number): number {
@@ -42,6 +48,9 @@ interface InputState {
   right: boolean;
 }
 
+// Type the Room state (optional but recommended)
+// type ArenaRoomState = ArenaState;
+
 const GameCanvas: React.FC<GameCanvasProps> = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const pixiContainer = useRef<HTMLDivElement>(null);
@@ -58,6 +67,10 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const currentHeading = useRef<number>(0); // Radians
   // Mock world position - might not be needed if we just pan the map
   // const worldPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Colyseus Refs
+  const colyseusClient = useRef<Client | null>(null);
+  const gameRoom = useRef<Room | null>(null); // Use specific type ArenaRoom<ArenaRoomState> later
 
   const gameLoop = useCallback((ticker: PIXI.Ticker) => {
     if (!pixiApp.current || !mapInstance.current || !carSprite.current) {
@@ -147,6 +160,51 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       case 'd': case 'ArrowRight': inputState.current.right = false; break;
     }
   }, []);
+
+  // Colyseus Connection Logic
+  const connectToServer = useCallback(async () => {
+    if (gameRoom.current || !isMounted.current) {
+        console.log("Already connected or component unmounted, skipping connection.");
+        return;
+    }
+    console.log(`Attempting to connect to Colyseus server at ${COLYSEUS_ENDPOINT}...`);
+    colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
+
+    try {
+        console.log("Joining 'arena' room...");
+        // TODO: Pass options like player name, auth token later
+        const room = await colyseusClient.current.joinOrCreate<any>('arena', {/* options */});
+        gameRoom.current = room;
+        console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}`);
+
+        // --- Room Event Listeners ---
+        room.onStateChange((state: any) => {
+            // This is where we'll receive synchronized state from the server
+            console.log("Received state update:", state);
+            // TODO: Update local game based on server state (e.g., other player positions)
+        });
+
+        room.onLeave((code: any) => {
+            console.log(`Left room '${room.name}' (code: ${code})`);
+            gameRoom.current = null;
+        });
+
+        room.onError((code: any, message: any) => {
+            console.error(`Room '${room.name}' error (code ${code}):`, message);
+            // Handle error appropriately (e.g., show message to user)
+        });
+
+        // Example: Listen for custom message type from server (optional)
+        // room.onMessage("some_event", (payload) => {
+        //     console.log("Received custom message:", payload);
+        // });
+        // ---------------------------
+
+    } catch (e) {
+        console.error("Failed to join or create room:", e);
+        // Handle connection error (e.g., show message, retry?)
+    }
+  }, []); // Dependencies: Potentially add auth token or user info later
 
   useEffect(() => {
     isMounted.current = true;
@@ -268,6 +326,12 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         window.addEventListener('keyup', handleKeyUp);
         listenersAdded = true;
         console.log("Input listeners added.");
+
+        // Connect to Colyseus AFTER Pixi is ready
+        if (isMounted.current) {
+            connectToServer();
+        }
+
       }).catch(error => {
         console.error("Error executing setupPixi promise:", error);
       });
@@ -310,6 +374,14 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
           console.log("Map instance ref was already null during cleanup.");
       }
 
+      // Leave Colyseus room if connected
+      if (gameRoom.current) {
+          console.log("Leaving Colyseus room...");
+          gameRoom.current.leave();
+          gameRoom.current = null;
+      }
+      colyseusClient.current = null;
+
       // Reset other refs
       carSprite.current = null;
       velocity.current = { x: 0, y: 0 };
@@ -317,7 +389,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       inputState.current = { up: false, down: false, left: false, right: false };
       console.log("Cleanup finished.");
     };
-  }, []); // Run only once on mount
+  }, [connectToServer]); // Add connectToServer to dependencies
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>

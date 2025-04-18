@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import maplibregl, { Map, LngLat } from 'maplibre-gl';
 import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import HUD from '../components/HUD'; // Import the HUD component
 
 // Map and Style
 // Read style URL from environment variable
@@ -326,7 +327,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       <div ref={pixiContainer} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         {/* Pixi canvas will be appended here */}
       </div>
-      {/* TODO: Add HUD components overlayed here */}
+      {/* Render the HUD component */}
+      <HUD />
     </div>
   );
 };

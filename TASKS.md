@@ -28,8 +28,8 @@ Building a browser-based, top-down "capture-the-flag" car-combat game on a real-
 - [ ] User: Set up Firebase project (Auth, Firestore, Functions, Hosting) & Enable Anonymous Auth
 - [ ] User: Update `.env` file in `client/` with real Firebase credentials (and uncomment init if needed)
 - [ ] User: Verify client anonymous auth works
-- [ ] Set up basic Colyseus server structure (`server/` directory, `package.json`, `tsconfig.json`)
-- [ ] Set up basic Firebase Functions structure (`firebase/functions/` directory, `package.json`, `tsconfig.json`)
+- [x] Set up basic Colyseus server structure (`server/` directory, `package.json`, `tsconfig.json`, `index.ts`, `ArenaRoom.ts`)
+- [x] Set up basic Firebase Functions structure (`firebase/functions/` directory, `package.json`, `tsconfig.json`, `index.ts`, `firebase.json`)
 - [ ] Configure basic Firebase Hosting deployment via `firebase.json`
 - [ ] Configure basic Colyseus server deployment (e.g., Dockerfile for Cloud Run)
 - [ ] Configure basic Firebase Functions deployment (`firebase.json`)

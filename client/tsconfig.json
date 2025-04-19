@@ -20,6 +20,10 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
+    /* Colyseus Schema Decorators */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
     /* Aliases */
     "baseUrl": ".",
     "paths": {

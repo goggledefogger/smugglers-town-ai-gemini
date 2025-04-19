@@ -1,125 +1,59 @@
-# Smuggler's Town (Geo-CTF Racer) Implementation
+# Smuggler's Town - Feature Implementation
 
-Building a browser-based, top-down "capture-the-flag" car-combat game on a real-world map, inspired by Smuggler's Run. Using React, TypeScript, Firebase, Colyseus, and Pixi.js/Phaser. Prioritizing a client-side UI prototype first.
+Core gameplay loop and networking implementation for the Real-World Map CTF Racer.
 
 ## Completed Tasks
 
-- [x] Define Product Requirements & System Design (SRS, UI Doc, Gameplay Doc)
-- [x] Scaffold client project structure (Vite, React, TS)
-- [x] Implement basic Firebase config and Anonymous Auth flow in client (structure only, functionality deferred)
+- [x] Basic project setup (Client: Vite/React/TS, Server: Node/TS)
+- [x] Integrate MapLibre GL JS for map display
+- [x] Integrate Pixi.js for canvas overlay rendering
+- [x] Initial MapLibre + Pixi rendering synchronization
+- [x] Basic local movement controls (keyboard input)
+- [x] Set up Colyseus server project (`server/`)
+- [x] Define basic server state schema (`ArenaState`, `Player`) using `@colyseus/schema`
+- [x] Implement basic `ArenaRoom` on server (create, join, leave)
+- [x] Add Colyseus client SDK to React app (`client/`)
+- [x] Implement client connection logic to Colyseus server (`GameCanvas.tsx`)
+- [x] Send client input (`dx`, `dy`) to server
+- [x] Implement server-authoritative movement logic in `ArenaRoom.update`
+- [x] Refactor server physics and state to use a meter-based world coordinate system
+- [x] Implement client-side conversion (`worldToGeo`) between server meters and map Lat/Lng
+- [x] Implement map centering based on authoritative local player state
+- [x] Resolve core sprite positioning issues by projecting in `gameLoop`
+- [x] Add `nodemon` for automatic server restarts during development
+- [x] Implement synchronized client-side interpolation (Map center + Local sprite)
 
-## In Progress Tasks (MVP Vertical Slices)
+## In Progress Tasks
 
-### Slice 1: Client-Side UI & Map Prototype
-- [ ] User: Install client dependencies (`npm install` in `client/`)
-- [ ] User: Create `.env` file in `client/` with placeholder Firebase credentials (or comment out Firebase init in `firebaseConfig.ts` for now)
-- [ ] User: Verify client runs (`npm run dev`)
-- [ ] Choose and integrate a map tile provider SDK (e.g., MapLibre GL JS, Leaflet) - Mock or live tiles
-- [ ] Choose and integrate a rendering engine (Pixi.js or Phaser)
-- [ ] Create a basic `GameCanvas` component in React
-- [ ] Render map tiles based on a default location/view
-- [ ] Create default car sprite asset
-- [ ] Implement client-side input handling (Keyboard WASD/Arrows - Desktop Scheme)
-- [ ] Implement *mock* client-side physics/movement (centered car, panning map - no server sync yet)
-- [ ] Render car sprite on the map, responding to input
-- [ ] Create basic HUD component in React (static placeholders for score/timer)
+- [ ] Implement rendering/interpolation for other players' sprites
 
-### Slice 2: Basic Backend & Real-time Setup
-- [ ] User: Set up Firebase project (Auth, Firestore, Functions, Hosting) & Enable Anonymous Auth
-- [ ] User: Update `.env` file in `client/` with real Firebase credentials (and uncomment init if needed)
-- [ ] User: Verify client anonymous auth works
-- [x] Set up basic Colyseus server structure (`server/` directory, `package.json`, `tsconfig.json`, `index.ts`, `ArenaRoom.ts`)
-- [x] Set up basic Firebase Functions structure (`firebase/functions/` directory, `package.json`, `tsconfig.json`, `index.ts`, `firebase.json`)
-- [ ] Configure basic Firebase Hosting deployment via `firebase.json`
-- [ ] Configure basic Colyseus server deployment (e.g., Dockerfile for Cloud Run)
-- [ ] Configure basic Firebase Functions deployment (`firebase.json`)
-- [ ] Set up initial GitHub Actions workflow for CI/CD (Client to Hosting, Server to Cloud Run, Functions)
+## Future Tasks
 
-### Slice 3: Real-time Connection & Basic Sync
-- [ ] Add Colyseus client SDK to the client project
-- [ ] Implement client logic to connect to a Colyseus room
-- [ ] Create basic Colyseus `ArenaRoom.ts` on the server
-- [ ] Define basic Colyseus State Schema (`Player` with `x`, `y`, `heading`)
-- [ ] Handle player join/leave in `ArenaRoom` (`onJoin`, `onLeave`)
-- [ ] Sync basic player state from server to clients and render other players (replace mock movement)
-
-### Slice 4: Authoritative Movement
-- [ ] Send client inputs to server via Colyseus messages (`INPUT`)
-- [ ] Implement server-authoritative physics simulation in `ArenaRoom` game loop (`setSimulationInterval`)
-- [ ] Broadcast authoritative game state (`STATE`) back to clients
-- [ ] Implement client-side state reconciliation (adjust predicted state based on server state)
-
-### Slice 5: Core Gameplay Objects & Interaction (MVP)
-- [ ] Add `Base` and `Pickup` to Colyseus state schema
-- [ ] Implement server logic to spawn bases and pickups at fixed/random locations
-- [ ] Render bases and pickups on the client map
-- [ ] Implement server-side collision detection (Car-Pickup, Car-Base)
-- [ ] Implement server logic for pickup capture (touch pickup -> attach to car state)
-- [ ] Implement server logic for delivery (touch own base with pickup -> score)
-- [ ] Implement basic team scoring state and logic
-- [ ] Implement basic match timer state and logic
-- [ ] Update client HUD to display live score/timer from game state
-
-## Future Tasks (Post-MVP)
-
-- [ ] Implement steal mechanic (`STEAL_COOLDOWN_MS`)
-- [ ] Implement boost mechanic (input, server logic, state, cooldown, visual feedback)
-- [ ] Implement reset mechanic (input, server logic)
-- [ ] Add mobile controls (virtual joystick, buttons) & responsive layout adjustments
-- [ ] Implement Lobby system (Firebase Functions REST API for `/lobbies`, Firestore for data, React components for UI)
-- [ ] Implement Matchmaking logic (Quick Play button -> find/create lobby)
-- [ ] Implement Colyseus `onAuth` to verify Firebase JWT for room joins
-- [ ] Implement Bot support (server-side AI players)
-- [ ] Implement settings screen (key-binds, audio controls, graphics quality)
-- [ ] Refine physics model (drifting, friction based on pseudo-terrain)
-- [ ] Implement visual styling ("Geo-Explorer Chic")
-- [ ] Add sound effects and background music
-- [ ] Implement advanced auth flows (Google, Email) and profile persistence
-- [ ] Implement match history/leaderboards (Firestore `matches` collection, Cloud Functions)
-- [ ] Add PWA features (manifest, service worker)
-- [ ] Integrate observability tools (Logging, Tracing, Sentry)
-- [ ] Add advanced map layers (collision, elevation - v1.1+)
-- [ ] Refine graphics (shaders, particles, 3D mode? - v1.2+)
+- [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
+- [ ] Implement server-side collision detection (player-player, player-object)
+- [ ] Add game state elements (pickups, bases, flags, scores, timers) to `ArenaState`
+- [ ] Implement core CTF game logic (picking up, carrying, capturing flags)
+- [ ] Add simple AI opponents (server-side)
+- [ ] Improve HUD with game state info (score, timer, etc.)
+- [ ] Refine player sprite graphics/animations
+- [ ] Add visual effects (e.g., speed lines, collision sparks)
+- [ ] Sound effects
+- [ ] Database integration (player accounts, stats persistence - if needed)
+- [ ] Deployment configuration (client and server)
+- [ ] Code sharing between client/server (e.g., using monorepo, shared package)
 
 ## Implementation Plan
 
-- **Initial Focus:** Client-side prototype using React, Vite, TypeScript, and Pixi.js/Phaser for map/sprite rendering and mock movement.
-- **Client:** React SPA (Vite, TypeScript) using Pixi.js/Phaser for rendering, Zustand for UI state, React Router for navigation, Colyseus Client SDK for WebSocket communication, Firebase SDK for auth & REST calls.
-- **Realtime Server:** Node.js + TypeScript application using Colyseus framework, deployed on GCP Cloud Run. Manages game rooms, authoritative physics, state synchronization.
-- **Backend Services:** Firebase (Auth, Firestore, Functions, Hosting) for user management, lobby data, REST API endpoints, and static client hosting.
-- **Architecture:** Client-Server authoritative model for game state. Stateless REST functions for lobby/user management. Stateful Colyseus rooms for active matches.
-- **Data Flow:** Client auths with Firebase -> interacts with REST API (Functions) for lobby -> connects to Colyseus Room (Cloud Run) via WebSocket for gameplay -> game results saved via Server/Functions to Firestore.
+The game uses a server-authoritative architecture. The client renders the game world based on state updates received from the server and sends user input. The server manages the game simulation, including physics, collisions, and game rules.
 
-## Relevant Files
+### Relevant Files
 
-- `client/` - React Frontend (Vite, TS, Pixi/Phaser) ✅ (scaffolded)
-  - `client/src/App.tsx` ✅ (basic auth added)
-  - `client/src/firebaseConfig.ts` ✅ (created, init potentially commented out)
-  - `client/src/main.tsx` ✅ (created)
-  - `client/src/vite-env.d.ts` ✅ (created)
-  - `client/index.html` ✅ (created)
-  - `client/package.json` ✅ (created)
-  - `client/tsconfig.json` ✅ (created)
-  - `client/vite.config.ts` ✅ (created)
-  - `client/src/components/` - UI Components ⏳
-  - `client/src/features/GameCanvas.tsx` - Main game rendering area ⏳
-  - `client/src/game/` - Client-side game logic, rendering, input ⏳
-  - `client/src/services/colyseus.ts` - Colyseus client setup ⏳ (deferred)
-  - `client/src/services/api.ts` - Firebase Functions client ⏳ (deferred)
-- `server/` - Colyseus Game Server (Node.js, TS) ⏳ (deferred)
-  - `server/src/ArenaRoom.ts` - Core game room logic ⏳
-  - `server/src/schemas/` - State definitions ⏳
-  - `server/src/index.ts` - Server entry point ⏳
-  - `server/package.json` ⏳
-  - `server/tsconfig.json` ⏳
-  - `server/Dockerfile` - For Cloud Run deployment ⏳
-- `firebase/` - Firebase Backend Config & Functions ⏳ (deferred)
-  - `firebase/functions/` - Cloud Functions source ⏳
-    - `firebase/functions/src/index.ts` - Functions entry point ⏳
-    - `firebase/functions/package.json` ⏳
-    - `firebase/functions/tsconfig.json` ⏳
-  - `firebase/firestore.rules` ⏳
-  - `firebase/firebase.json` ⏳
-- `.github/workflows/deploy.yml` - CI/CD Pipeline ⏳ (deferred)
-- `TASKS.md` ✅ (this file)
-- `README.md` ⏳
+- `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates.
+- `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, and running the server-side game simulation loop.
+- `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`.
+- `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client.
+- `server/src/index.ts`: Entry point for the Colyseus server setup.
+- `client/src/main.tsx`: Entry point for the React client application.
+- `server/package.json`, `client/package.json`: Project dependencies.
+- `server/tsconfig.json`, `client/tsconfig.json`: TypeScript configurations.
+- `.env`: Environment variables (e.g., `VITE_MAPLIBRE_STYLE_URL`).

@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import maplibregl, { Map, LngLat } from 'maplibre-gl';
+import maplibregl, { Map, LngLat, Point } from 'maplibre-gl';
 import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Client, Room } from 'colyseus.js'; // Import Colyseus client
-import HUD from '../components/HUD'; // Import the HUD component
+import { Client, Room } from 'colyseus.js'; // Re-enabled
+import HUD from '../components/HUD'; // Re-enabled
+import { ArenaState, Player } from '../schemas/ArenaState'; // Re-enabled
 
 // Map and Style
 // Read style URL from environment variable
@@ -15,6 +16,11 @@ if (!MAP_STYLE_URL) {
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
 const INITIAL_ZOOM = 17; // Zoom closer
 
+// World Origin (matches initial map center)
+const ORIGIN_LNG = INITIAL_CENTER[0];
+const ORIGIN_LAT = INITIAL_CENTER[1];
+const METERS_PER_DEGREE_LAT_APPROX = 111320;
+
 // Game Constants - Focus on Pixel Speed for now
 // const MAX_SPEED_MPS = 14; // Target real-world speed (for later)
 // const PIXELS_PER_METER = 8; // Removing this direct link for now
@@ -22,10 +28,11 @@ const MAX_SPEED_PIXELS = 250; // TUNABLE: Target pixels/second panning speed
 const ACCEL_RATE = 10; // TUNABLE: How quickly we reach max speed (higher = faster)
 const TURN_SMOOTH = 12;
 
+// Client-side visual tuning
+const INTERPOLATION_FACTOR = 0.3; // Keep the factor from before
+
 // Colyseus Endpoint
-const COLYSEUS_ENDPOINT = process.env.NODE_ENV === 'production'
-    ? 'wss://your-production-colyseus-url' // TODO: Replace with your deployed server URL
-    : 'ws://localhost:2567'; // Local development server
+const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
 
 // --- Helper Functions ---
 function lerp(start: number, end: number, factor: number): number {
@@ -37,370 +44,329 @@ function angleLerp(startAngle: number, endAngle: number, factor: number): number
   const shortestAngle = ((delta + Math.PI) % (2 * Math.PI)) - Math.PI;
   return startAngle + factor * shortestAngle;
 }
-// -----------------------
 
-interface GameCanvasProps {}
-
-interface InputState {
-  up: boolean;
-  down: boolean;
-  left: boolean;
-  right: boolean;
+// Helper to get meters per degree longitude at a given latitude
+function metersPerDegreeLngApprox(latitude: number): number {
+    return METERS_PER_DEGREE_LAT_APPROX * Math.cos(latitude * Math.PI / 180);
 }
 
-// Type the Room state (optional but recommended)
-// type ArenaRoomState = ArenaState;
+// Approximate conversion from world meters (relative to origin) to Geo coords
+function worldToGeo(x_meters: number, y_meters: number): [number, number] { // [lng, lat]
+    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin lat for approximation
+    if (!isFinite(metersPerLng) || metersPerLng === 0) return [ORIGIN_LNG, ORIGIN_LAT]; // Avoid division by zero
+    const deltaLng = x_meters / metersPerLng;
+    const deltaLat = y_meters / METERS_PER_DEGREE_LAT_APPROX;
+    return [ORIGIN_LNG + deltaLng, ORIGIN_LAT + deltaLat];
+}
+
+// --- Component ---
+interface GameCanvasProps {}
+interface InputState { up: boolean; down: boolean; left: boolean; right: boolean; }
+type ArenaRoomType = Room<ArenaState>; // Re-enabled
 
 const GameCanvas: React.FC<GameCanvasProps> = () => {
+  // --- Refs ---
   const mapContainer = useRef<HTMLDivElement>(null);
   const pixiContainer = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<Map | null>(null);
   const pixiApp = useRef<PIXI.Application | null>(null);
-
   const isMounted = useRef(false);
-  const pixiInitComplete = useRef(false); // Track Pixi init success
-
-  // Game State Refs
+  const pixiInitComplete = useRef(false);
   const inputState = useRef<InputState>({ up: false, down: false, left: false, right: false });
   const carSprite = useRef<PIXI.Graphics | null>(null);
-  const velocity = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const currentHeading = useRef<number>(0); // Radians
-  // Mock world position - might not be needed if we just pan the map
-  // const worldPosition = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Colyseus Refs
+  const otherPlayerSprites = useRef<{ [sessionId: string]: PIXI.Graphics }>({});
+  const allPlayersServerState = useRef<{ [sessionId: string]: Player }>({}); // Use object for state
+  const mapTargetCenter = useRef<LngLat | null>(null);
   const colyseusClient = useRef<Client | null>(null);
-  const gameRoom = useRef<Room | null>(null); // Use specific type ArenaRoom<ArenaRoomState> later
+  const gameRoom = useRef<ArenaRoomType | null>(null);
 
+  // Debug refs for local-only panning test
+  const debugLocalX = useRef<number>(0);
+  const debugLocalY = useRef<number>(0);
+  const debugSpeed = 5; // Meters per frame equivalent for testing
+
+  // --- Game Loop ---
   const gameLoop = useCallback((ticker: PIXI.Ticker) => {
-    if (!pixiApp.current || !mapInstance.current || !carSprite.current) {
-        // console.warn("GameLoop: Refs not ready"); // Optional: uncomment if needed
-        return;
+    const normalizedDeltaFactor = ticker.deltaMS / (1000 / 60);
+    const lerpFactor = Math.min(INTERPOLATION_FACTOR * normalizedDeltaFactor, 1.0);
+
+    // --- Send Input ---
+    if (gameRoom.current) {
+        const input = inputState.current;
+        const dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+        const dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+        gameRoom.current.send("input", { dx, dy });
     }
 
-    const dt = ticker.deltaMS / 1000;
-
-    // --- Input Calculation ---
-    const input = inputState.current;
-    const dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-    const dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-
-    let magnitude = Math.sqrt(dx * dx + dy * dy);
-    let dirX = 0;
-    let dirY = 0;
-    if (magnitude > 0) {
-      dirX = dx / magnitude;
-      dirY = dy / magnitude;
+    // --- Map Interpolation ---
+    if (mapInstance.current && mapTargetCenter.current) {
+        const currentMap = mapInstance.current;
+        const currentCenter = currentMap.getCenter();
+        const targetCenter = mapTargetCenter.current;
+        const nextLng = lerp(currentCenter.lng, targetCenter.lng, lerpFactor);
+        const nextLat = lerp(currentCenter.lat, targetCenter.lat, lerpFactor);
+        if (Math.abs(currentCenter.lng - nextLng) > 1e-7 || Math.abs(currentCenter.lat - nextLat) > 1e-7) {
+             try { currentMap.setCenter([nextLng, nextLat]); } catch (e) { console.warn("Error setting interpolated map center:", e); }
+        }
     }
 
-    // --- Movement Logic ---
-    const targetVelX = dirX * MAX_SPEED_PIXELS;
-    const targetVelY = dirY * MAX_SPEED_PIXELS;
-    const accelFactor = Math.min(ACCEL_RATE * dt, 1.0);
+    // --- Sprite Interpolation (Projecting Target Here) ---
+    if (pixiApp.current && mapInstance.current) {
+        const currentMap = mapInstance.current;
 
-    const oldVelX = velocity.current.x;
-    const oldVelY = velocity.current.y;
-    velocity.current.x = lerp(oldVelX, targetVelX, accelFactor);
-    velocity.current.y = lerp(oldVelY, targetVelY, accelFactor);
+        // Log keys once per frame before loop if needed
+        // console.log("Other Sprites Keys:", Object.keys(otherPlayerSprites.current));
 
-    const deltaX = velocity.current.x * dt;
-    const deltaY = velocity.current.y * dt;
+        // Iterate using Object.keys
+        Object.keys(allPlayersServerState.current).forEach((sessionId: string) => {
+            const playerState = allPlayersServerState.current[sessionId];
+            const isLocalPlayer = sessionId === gameRoom.current?.sessionId;
+            const sprite = isLocalPlayer ? carSprite.current : otherPlayerSprites.current[sessionId];
 
-    // --- DEBUG LOGGING --- (Commented out)
-    /*
-    if (dx !== 0 || dy !== 0 || Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
-      console.log(
-        `Input:(${dx},${dy}) ` +
-        `Vel:(${velocity.current.x.toFixed(2)}, ${velocity.current.y.toFixed(2)}) ` +
-        `Delta:(${deltaX.toFixed(3)}, ${deltaY.toFixed(3)}) ` +
-        `Heading: ${currentHeading.current.toFixed(2)}`
-      );
+            // *** DEBUG LOGGING START ***
+            // console.log(`[GameLoop] Processing SID: ${sessionId}, Local?: ${isLocalPlayer}, Room SID: ${gameRoom.current?.sessionId}, Sprite Found?: ${!!sprite}, OtherSpriteKeys: ${JSON.stringify(Object.keys(otherPlayerSprites.current))}`);
+            // *** DEBUG LOGGING END ***
+
+            if (!sprite) {
+                if (!isLocalPlayer) console.warn(`[GameLoop] Sprite missing for remote player: ${sessionId}`);
+                return;
+            }
+
+            if (playerState && isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
+                try {
+                    const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
+                    const targetScreenPos = currentMap.project([targetLng, targetLat]);
+                    if (!isFinite(targetScreenPos?.x) || !isFinite(targetScreenPos?.y)) {
+                         throw new Error("Invalid projected screen pos in gameLoop");
+                    }
+                    const targetRotation = -playerState.heading + Math.PI / 2;
+
+                    // Interpolate Sprite towards target
+                    sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
+                    sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
+                    sprite.rotation = angleLerp(sprite.rotation, targetRotation, lerpFactor);
+                    sprite.visible = true;
+
+                } catch (e) {
+                    console.warn(`Error updating sprite ${sessionId} in gameLoop:`, e);
+                    sprite.visible = false;
+                 }
+            } else {
+                sprite.visible = false;
+            }
+        });
     }
-    */
-    // -------------------
+  }, []);
 
-    // --- Map Panning ---
-    if (Math.abs(deltaX) > 0.01 || Math.abs(deltaY) > 0.01) {
-      mapInstance.current.panBy([deltaX, deltaY], { duration: 0, animate: false });
-    }
-
-    // --- Car Rotation ---
-    let targetHeading = currentHeading.current; // Keep current heading if no input
-    if (dirX !== 0 || dirY !== 0) {
-      // Calculate angle relative to positive X axis
-      const angle = Math.atan2(dirY, dirX);
-      // Add offset because our sprite's "forward" is initially pointing up (-PI/2)
-      // instead of right (0)
-      targetHeading = angle;
-    }
-    const turnFactor = Math.min(TURN_SMOOTH * dt, 1.0);
-    // Lerp towards the target angle
-    currentHeading.current = angleLerp(currentHeading.current, targetHeading, turnFactor);
-
-    // Apply the final rotation to the sprite
-    // Adding PI/2 offset directly here to correct visual orientation
-    carSprite.current.rotation = currentHeading.current + (Math.PI / 2);
-
-  }, []); // End of gameLoop
-
+  // Input Handlers (Keep)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    switch (event.key) {
-      case 'w': case 'ArrowUp': inputState.current.up = true; break;
-      case 's': case 'ArrowDown': inputState.current.down = true; break;
-      case 'a': case 'ArrowLeft': inputState.current.left = true; break;
-      case 'd': case 'ArrowRight': inputState.current.right = true; break;
-    }
+      switch (event.key) {
+          case 'w': case 'ArrowUp': inputState.current.up = true; break;
+          case 's': case 'ArrowDown': inputState.current.down = true; break;
+          case 'a': case 'ArrowLeft': inputState.current.left = true; break;
+          case 'd': case 'ArrowRight': inputState.current.right = true; break;
+      }
   }, []);
-
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
-    switch (event.key) {
-      case 'w': case 'ArrowUp': inputState.current.up = false; break;
-      case 's': case 'ArrowDown': inputState.current.down = false; break;
-      case 'a': case 'ArrowLeft': inputState.current.left = false; break;
-      case 'd': case 'ArrowRight': inputState.current.right = false; break;
-    }
+       switch (event.key) {
+          case 'w': case 'ArrowUp': inputState.current.up = false; break;
+          case 's': case 'ArrowDown': inputState.current.down = false; break;
+          case 'a': case 'ArrowLeft': inputState.current.left = false; break;
+          case 'd': case 'ArrowRight': inputState.current.right = false; break;
+      }
   }, []);
 
-  // Colyseus Connection Logic
+  // Colyseus Connection Logic (Restore)
   const connectToServer = useCallback(async () => {
-    if (gameRoom.current || !isMounted.current) {
-        console.log("Already connected or component unmounted, skipping connection.");
-        return;
-    }
+    if (gameRoom.current || !isMounted.current) return;
     console.log(`Attempting to connect to Colyseus server at ${COLYSEUS_ENDPOINT}...`);
     colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
-
     try {
-        console.log("Joining 'arena' room...");
-        // TODO: Pass options like player name, auth token later
-        const room = await colyseusClient.current.joinOrCreate<any>('arena', {/* options */});
+        const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', {});
         gameRoom.current = room;
         console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}`);
 
-        // --- Room Event Listeners ---
-        room.onStateChange((state: any) => {
-            // This is where we'll receive synchronized state from the server
-            console.log("Received state update:", state);
-            // TODO: Update local game based on server state (e.g., other player positions)
-        });
+        room.onStateChange((state: ArenaState) => {
+            if (!mapInstance.current || !pixiApp.current || !isMounted.current) return;
 
-        room.onLeave((code: any) => {
-            console.log(`Left room '${room.name}' (code: ${code})`);
-            gameRoom.current = null;
-        });
+            const incomingPlayerIds = new Set<string>();
+            const newState: { [sessionId: string]: Player } = {};
 
-        room.onError((code: any, message: any) => {
-            console.error(`Room '${room.name}' error (code ${code}):`, message);
-            // Handle error appropriately (e.g., show message to user)
-        });
+            // Update state for current players
+            state.players.forEach((player, sessionId) => {
+                incomingPlayerIds.add(sessionId);
+                // Store the actual Player instance
+                newState[sessionId] = player;
+            });
 
-        // Example: Listen for custom message type from server (optional)
-        // room.onMessage("some_event", (payload) => {
-        //     console.log("Received custom message:", payload);
-        // });
-        // ---------------------------
+            // Update the ref object
+            allPlayersServerState.current = newState;
 
-    } catch (e) {
-        console.error("Failed to join or create room:", e);
-        // Handle connection error (e.g., show message, retry?)
-    }
-  }, []); // Dependencies: Potentially add auth token or user info later
-
-  useEffect(() => {
-    isMounted.current = true;
-    pixiInitComplete.current = false; // Reset on effect run
-    let map: Map | null = null;
-    let app: PIXI.Application | null = null;
-    let listenersAdded = false;
-    let tickerAdded = false;
-
-    if (mapInstance.current || pixiApp.current) {
-      console.warn("Initialization already done or in progress. Skipping.");
-      return;
-    }
-    if (!mapContainer.current || !pixiContainer.current) {
-      console.error("DOM containers not ready. Skipping.");
-      return;
-    }
-
-    const currentMapContainer = mapContainer.current;
-    const currentPixiContainer = pixiContainer.current;
-
-    console.log("Starting initialization...");
-
-    // 1. Initialize MapLibre
-    try {
-      map = new Map({
-        container: currentMapContainer,
-        style: MAP_STYLE_URL,
-        center: INITIAL_CENTER,
-        zoom: INITIAL_ZOOM,
-        interactive: false,
-      });
-      mapInstance.current = map;
-    } catch (error) {
-      console.error("Error initializing MapLibre:", error);
-      return; // Stop if map fails
-    }
-
-    // 2. Initialize Pixi App Ref
-    app = new PIXI.Application();
-    pixiApp.current = app;
-
-    const setupPixi = async () => {
-      if (!pixiApp.current || !currentPixiContainer) {
-        console.error("Pixi App or Container ref became null before async init call.");
-        return;
-      }
-      console.log("Calling Pixi App init...");
-      try {
-        await pixiApp.current.init({
-          resizeTo: currentPixiContainer,
-          backgroundAlpha: 0,
-          resolution: window.devicePixelRatio || 1,
-          autoDensity: true,
-        });
-        // Check mount status immediately after await
-        if (!isMounted.current || !pixiApp.current) {
-            console.log("Component unmounted or Pixi App nulled during init. Aborting setup.");
-            // If init succeeded but we unmounted, try to destroy gracefully
-            if (pixiApp.current) {
-                 pixiApp.current.destroy(true, { children: true, texture: true });
-                 pixiApp.current = null;
+            // Update Map Target Center based on local player
+            const localPlayerState = allPlayersServerState.current[room.sessionId];
+            if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
+                 try {
+                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                    if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat");
+                    mapTargetCenter.current = new LngLat(targetLng, targetLat);
+                 } catch(e) {
+                    console.warn("Error calculating map target center:", e);
+                    mapTargetCenter.current = null;
+                 }
+            } else {
+                mapTargetCenter.current = null; // Clear target if local state is invalid
             }
-            return;
-        }
-        pixiInitComplete.current = true; // Mark init as successful
-        console.log("Pixi App init successful.");
 
-      } catch (error) {
-          console.error("Error during Pixi App init call:", error);
-          pixiInitComplete.current = false;
-          // Attempt cleanup even if init fails partially
-          if (pixiApp.current) {
-            pixiApp.current.destroy(true, { children: true, texture: true });
-            pixiApp.current = null;
-          }
-          return;
-      }
+            // --- Create/Remove Other Player Sprites ---
+            incomingPlayerIds.forEach(sessionId => {
+                if (sessionId === room.sessionId) return;
+                let sprite = otherPlayerSprites.current[sessionId];
+                if (!sprite && pixiApp.current?.stage) {
+                    // Check if player state actually exists before creating sprite?
+                    // Although it should if the key is in incomingPlayerIds
+                    console.log(`Creating sprite for player ${sessionId}`);
+                    const otherCarWidth = 20; const otherCarHeight = 40;
+                    // --- Create Blue Sprite ---
+                    sprite = new PIXI.Graphics()
+                        .rect(0, 0, otherCarWidth, otherCarHeight).fill({ color: 0x0000ff }) // Blue rectangle
+                        .poly([ otherCarWidth / 2, -5, otherCarWidth, 10, 0, 10]).fill({ color: 0xffffff }); // White arrow
+                    // --- End Create Blue Sprite ---
+                    sprite.pivot.set(otherCarWidth / 2, otherCarHeight / 2);
+                    sprite.x = -1000; sprite.y = -1000; sprite.visible = false;
+                    pixiApp.current.stage.addChild(sprite);
+                    otherPlayerSprites.current[sessionId] = sprite;
+                }
+            });
+            const currentSpriteIds = Object.keys(otherPlayerSprites.current);
+            currentSpriteIds.forEach(sessionId => {
+                if (!incomingPlayerIds.has(sessionId)) { // Use incomingPlayerIds for check
+                    console.log(`Removing sprite for player who left: ${sessionId}`);
+                    const spriteToRemove = otherPlayerSprites.current[sessionId];
+                    if (spriteToRemove) { /* ... destroy sprite ... */ }
+                    delete otherPlayerSprites.current[sessionId];
+                }
+            });
+        });
 
-      console.log("Appending Pixi canvas...");
-      if (pixiApp.current && !currentPixiContainer.contains(pixiApp.current.canvas)) {
-        currentPixiContainer.appendChild(pixiApp.current.canvas);
-      }
+        room.onLeave((code: number) => { /* ... */ });
+        room.onError((code: number, message?: string) => { /* ... */ });
 
-      if (pixiApp.current && pixiInitComplete.current) { // Ensure init completed
-        console.log("Setting up Pixi stage...");
-        const carWidth = 20;
-        const carHeight = 40;
-        const carGfx = new PIXI.Graphics()
-          .rect(0, 0, carWidth, carHeight)
-          .fill({ color: 0xff0000 });
-        carGfx.poly([ carWidth / 2, -5, carWidth, 10, 0, 10]).fill({ color: 0xffffff });
-        carGfx.pivot.set(carWidth / 2, carHeight / 2);
-        carGfx.x = pixiApp.current.screen.width / 2;
-        carGfx.y = pixiApp.current.screen.height / 2;
-        pixiApp.current.stage.addChild(carGfx);
-        carSprite.current = carGfx;
-        console.log("Car sprite added.");
+    } catch (e) { console.error("Failed to join or create room:", e); }
+  }, []);
 
-        pixiApp.current.ticker.add(gameLoop);
-        tickerAdded = true;
-        console.log("Game loop added.");
-      }
-    };
+  // useEffect (setup/cleanup) - Restore connection call, sprite creation
+  useEffect(() => {
+      isMounted.current = true;
+      pixiInitComplete.current = false;
+      let map: Map | null = null;
+      let app: PIXI.Application | null = null;
+      let listenersAdded = false;
+      let tickerAdded = false;
 
-    map.on('load', () => {
-      if (!isMounted.current || !mapInstance.current) {
-        console.log("Map loaded, but component unmounted or map nulled. Skipping Pixi setup.");
-        return;
-      }
-      console.log('MapLibre map loaded.');
-      setupPixi().then(() => {
-        if (!isMounted.current || !pixiInitComplete.current) { // Check init flag too
-          console.log("Pixi setup promise resolved, but component unmounted or Pixi init failed. Skipping listeners.");
-          return;
-        }
-        console.log('PixiJS setup complete.');
-        window.addEventListener('keydown', handleKeyDown);
-        window.addEventListener('keyup', handleKeyUp);
-        listenersAdded = true;
-        console.log("Input listeners added.");
+      if (!mapContainer.current || !pixiContainer.current) return;
+      const currentMapContainer = mapContainer.current;
+      const currentPixiContainer = pixiContainer.current;
 
-        // Connect to Colyseus AFTER Pixi is ready
-        if (isMounted.current) {
-            connectToServer();
-        }
+      console.log("Starting initialization (Restoring Full Mode)...");
 
-      }).catch(error => {
-        console.error("Error executing setupPixi promise:", error);
+      try {
+        map = new Map({ container: currentMapContainer, style: MAP_STYLE_URL, center: INITIAL_CENTER, zoom: INITIAL_ZOOM, interactive: false });
+        mapInstance.current = map;
+      } catch (error) { console.error("Map init error:", error); return; }
+
+      app = new PIXI.Application();
+      pixiApp.current = app;
+
+      const setupPixi = async () => {
+          try {
+            await app!.init({ resizeTo: currentPixiContainer, backgroundAlpha: 0, resolution: window.devicePixelRatio || 1, autoDensity: true });
+            if (!isMounted.current) return;
+            pixiInitComplete.current = true;
+            console.log("Pixi init ok.");
+            currentPixiContainer.appendChild(app!.canvas);
+
+            // Restore car sprite creation
+            console.log("Setting up Pixi stage...");
+            const carWidth = 20; const carHeight = 40;
+            const carGfx = new PIXI.Graphics() // Red
+                .rect(0, 0, carWidth, carHeight).fill({ color: 0xff0000 })
+                .poly([ carWidth / 2, -5, carWidth, 10, 0, 10]).fill({ color: 0xffffff });
+            carGfx.pivot.set(carWidth / 2, carHeight / 2);
+            carGfx.x = -1000; carGfx.y = -1000; // Start off-screen
+            app!.stage.addChild(carGfx);
+            carSprite.current = carGfx;
+            console.log("Car sprite added.");
+
+            app!.ticker.add(gameLoop);
+            tickerAdded = true;
+            console.log("Game loop added.");
+          } catch (error) { console.error("Pixi init error:", error); return; }
+      };
+
+      map.on('load', () => {
+          if (!isMounted.current) return;
+          console.log('Map loaded.');
+          setupPixi().then(() => {
+              if (!isMounted.current || !pixiInitComplete.current) return;
+              console.log('Pixi setup complete.');
+              window.addEventListener('keydown', handleKeyDown);
+              window.addEventListener('keyup', handleKeyUp);
+              listenersAdded = true;
+              console.log("Input listeners added.");
+              // Re-enable connection to server
+              if (isMounted.current) {
+                  connectToServer();
+              }
+          }).catch(console.error);
       });
-    });
+      map.on('error', (e) => console.error('MapLibre error:', e));
 
-    map.on('error', (e) => console.error('MapLibre error:', e));
-
-    // Cleanup function
-    return () => {
-      console.log(`Running cleanup (isMounted: ${isMounted.current}, pixiInitComplete: ${pixiInitComplete.current})...`);
-      const wasMounted = isMounted.current; // Capture state before setting false
-      isMounted.current = false;
-
-      if (listenersAdded) {
-        console.log("Removing input listeners...");
-        window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('keyup', handleKeyUp);
-      }
-
-      const currentPixiApp = pixiApp.current;
-      if (currentPixiApp && pixiInitComplete.current) { // Check init flag before destroy
-        console.log("Cleaning up Pixi...");
-        if (tickerAdded) {
-          currentPixiApp.ticker.remove(gameLoop);
+      return () => {
+        console.log("Running cleanup (Full Mode)...", tickerAdded);
+        isMounted.current = false;
+        if (listenersAdded) {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
         }
-        console.log("Destroying Pixi app...");
-        currentPixiApp.destroy(true, { children: true, texture: true });
-
-      } else if (currentPixiApp) {
-          console.log("Pixi app exists but init did not complete, skipping destroy.")
-      }
-      pixiApp.current = null; // Always null out ref
-
-      const currentMap = mapInstance.current;
-      if (currentMap) {
-        console.log("Cleaning up MapLibre...");
-        currentMap.remove();
-        mapInstance.current = null;
-      } else if (wasMounted) { // Only log if it was mounted but ref is null
-          console.log("Map instance ref was already null during cleanup.");
-      }
-
-      // Leave Colyseus room if connected
-      if (gameRoom.current) {
-          console.log("Leaving Colyseus room...");
-          gameRoom.current.leave();
-          gameRoom.current = null;
-      }
-      colyseusClient.current = null;
-
-      // Reset other refs
-      carSprite.current = null;
-      velocity.current = { x: 0, y: 0 };
-      currentHeading.current = 0;
-      inputState.current = { up: false, down: false, left: false, right: false };
-      console.log("Cleanup finished.");
-    };
-  }, [connectToServer]); // Add connectToServer to dependencies
+        if (pixiApp.current && pixiInitComplete.current) { // Keep the init check
+            if (tickerAdded && pixiApp.current.ticker) {
+                pixiApp.current.ticker.remove(gameLoop);
+            }
+            console.log("Destroying initialized Pixi app...");
+            pixiApp.current.destroy(true, { children: true, texture: true });
+        } else if (pixiApp.current) {
+             console.log("Pixi app ref exists but init incomplete, skipping destroy.");
+        }
+        pixiApp.current = null;
+        if (mapInstance.current) {
+            console.log("Removing MapLibre map...");
+            mapInstance.current.remove();
+            mapInstance.current = null;
+        }
+        // Leave Colyseus room
+        if (gameRoom.current) {
+            console.log("Leaving Colyseus room...");
+            gameRoom.current.leave();
+            gameRoom.current = null;
+        }
+        colyseusClient.current = null;
+        // Reset refs
+        carSprite.current = null;
+        otherPlayerSprites.current = {};
+        inputState.current = { up: false, down: false, left: false, right: false };
+        // Clear the new state ref
+        allPlayersServerState.current = {}; // Clear object ref
+        console.log("Cleanup finished.");
+      };
+  }, [connectToServer, gameLoop, handleKeyDown, handleKeyUp]); // Restore dependencies
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-      {/* MapLibre container */}
       <div ref={mapContainer} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} />
-      {/* Pixi.js overlay container */}
       <div ref={pixiContainer} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         {/* Pixi canvas will be appended here */}
       </div>
-      {/* Render the HUD component */}
-      <HUD />
+      <HUD /> {/* Re-enabled */}
     </div>
   );
 };

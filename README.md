@@ -1,75 +1,123 @@
-# Real-World Map CTF Racer
+# Smuggler's Town AI
 
-A browser-based, real-time multiplayer "capture-the-flag" style game played on a real-world map, inspired by games like Smuggler's Run.
+A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, and Colyseus. Players control vehicles on a real-world map, aiming to implement Capture the Flag (CTF) style gameplay.
 
-## Core Technologies
+## Features
 
-*   **Frontend (Client):**
-    *   React + TypeScript
-    *   Vite (Build Tool)
-    *   MapLibre GL JS (Interactive Map Rendering)
-    *   Pixi.js (2D WebGL Overlay Rendering for sprites/effects)
-    *   Colyseus JavaScript Client (WebSocket Networking)
-    *   Tailwind CSS (Styling - Placeholder)
-*   **Backend (Server):**
-    *   Node.js + TypeScript
-    *   Colyseus Framework (WebSocket Server, Room Management, State Synchronization)
-    *   Express (Underlying HTTP server for Colyseus)
+### Current
+- Real-time synchronization of player position and heading using Colyseus.
+- Map rendering using MapLibre GL JS centered on a real-world location (Times Square, NYC).
+- 2D vehicle rendering overlay using PixiJS.
+- Server-authoritative movement with client-side interpolation for smoothness.
+- Keyboard controls (WASD/Arrows) for vehicle movement.
+- Meter-based coordinate system on the server, translated to GeoJSON for map display.
+- Basic client-server structure with TypeScript on both ends.
 
-## Architecture Overview
+### Planned / Future
+- Capture the Flag (CTF) game mechanics (bases, flags, scoring).
+- Client-side prediction for improved input responsiveness.
+- Server-side collision detection.
+- Simple AI opponents.
+- Improved HUD with game state display.
+- Enhanced visuals and sound effects.
+- Shared code strategy (monorepo or shared package) to avoid schema duplication.
+- Deployment configuration.
 
-The game employs a standard **server-authoritative** model for real-time multiplayer gameplay.
+## Tech Stack
 
-1.  **Server (`./server`):**
-    *   Runs a Colyseus game server.
-    *   Manages game rooms (`ArenaRoom`).
-    *   Maintains the **authoritative game state** (`ArenaState`) using `@colyseus/schema`. This includes player positions, headings, scores, etc.
-    *   Receives player input (`{dx, dy}`) via WebSockets.
-    *   Runs the **physics simulation** in a fixed `update` loop (currently 60Hz). Physics operates in a **2D meter-based world coordinate system** relative to a fixed origin.
-    *   Calculates player velocity and position based on input and game rules (speed, acceleration).
-    *   Automatically synchronizes changes in `ArenaState` back to all connected clients in the room.
+- **Frontend (Client):**
+    - React 18
+    - Vite
+    - TypeScript
+    - PixiJS (v8)
+    - MapLibre GL JS (v4)
+    - Colyseus JavaScript Client (`colyseus.js`)
+    - Tailwind CSS (for HUD - planned)
+- **Backend (Server):**
+    - Node.js (v18+ recommended, v20 specified in `package.json`)
+    - TypeScript
+    - Colyseus (`@colyseus/core`, `@colyseus/schema`)
+    - `nodemon` (for development)
+- **Development:**
+    - `npm` (Node Package Manager)
 
-2.  **Client (`./client`):**
-    *   Connects to the Colyseus server via WebSockets.
-    *   Receives `ArenaState` updates from the server.
-    *   **Renders the Game:**
-        *   Uses **MapLibre GL JS** to display the real-world map background.
-        *   Uses **Pixi.js** to render sprites (cars, etc.) on a transparent overlay canvas positioned above the map.
-    *   **Coordinate Mapping:**
-        *   Receives player state in meters (`x`, `y`) from the server.
-        *   Uses helper functions (`worldToGeo`) to convert the authoritative meter coordinates to geographic coordinates (`[Lng, Lat]`).
-        *   Centers the MapLibre map on the local player's authoritative geographic coordinates (`map.setCenter`).
-    *   **Sprite Positioning (in `gameLoop`):**
-        *   The Pixi rendering loop (`gameLoop`) runs every animation frame.
-        *   It takes the latest known authoritative server position for the local player.
-        *   It converts this position to `[Lng, Lat]`.
-        *   It uses MapLibre's `map.project()` function to get the correct **screen pixel coordinates** for the player relative to the *currently rendered* map view.
-        *   It directly sets the Pixi sprite's `x`, `y`, and `rotation` based on the projected coordinates and server heading.
-        *   *(Next Step: Re-introduce interpolation here for visual smoothness)*.
-    *   **Input Handling:**
-        *   Captures keyboard input (WASD/Arrows).
-        *   Sends normalized direction vectors (`{dx, dy}`) to the server on every frame via the `gameLoop`.
+## Getting Started
 
-## Setup
+### Prerequisites
+- Node.js (v18 or v20 recommended)
+- npm
 
-1.  **Prerequisites:** Node.js (v18+ recommended, check `server/package.json` for specific engine requirements), npm.
-2.  **Clone Repository:** `git clone <repository-url>`
+### Setup
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd smugglers-town-ai-gemini
+    ```
+2.  **Environment Variables:**
+    - Create a `.env` file in the `client/` directory:
+      ```
+      VITE_MAPLIBRE_STYLE_URL="YOUR_MAPLIBRE_STYLE_URL"
+      ```
+    - Replace `"YOUR_MAPLIBRE_STYLE_URL"` with a valid MapLibre style URL (e.g., from MapTiler Cloud, Stadia Maps, etc.).
 3.  **Install Dependencies:**
-    *   Navigate to the `server` directory: `cd server && npm install`
-    *   Navigate to the `client` directory: `cd ../client && npm install`
-4.  **Environment Variables:**
-    *   Create a `.env` file in the `client` directory (`client/.env`).
-    *   Add your MapLibre style URL: `VITE_MAPLIBRE_STYLE_URL=YOUR_MAPLIBRE_STYLE_URL_HERE`
-        *   You can get free vector styles from sources like [Maptiler Cloud](https://cloud.maptiler.com/) or self-host.
+    - Install server dependencies:
+      ```bash
+      cd server
+      npm install
+      ```
+    - Install client dependencies:
+      ```bash
+      cd ../client
+      npm install
+      ```
 
-## Running the Project
+### Running Locally
+1.  **Start the Colyseus Server:**
+    - Open a terminal in the `server/` directory:
+      ```bash
+      npm run dev
+      ```
+    - The server will start (usually on `ws://localhost:2567`) and automatically restart on file changes thanks to `nodemon`.
+2.  **Start the React Client:**
+    - Open a second terminal in the `client/` directory:
+      ```bash
+      npm run dev
+      ```
+    - Vite will build the client and provide a local URL (usually `http://localhost:5173`).
+3.  **Open the Game:**
+    - Open the client URL in your web browser.
+    - Open a second tab/browser to the same URL to see multiplayer functionality.
 
-1.  **Start the Server:**
-    *   Navigate to the `server` directory.
-    *   Run: `npm run dev`
-    *   This uses `nodemon` to watch for changes and automatically restart the server.
-2.  **Start the Client:**
-    *   Navigate to the `client` directory.
-    *   Run: `npm run dev`
-    *   This starts the Vite development server.
-3.  **Open in Browser:** Access the URL provided by the Vite dev server (usually `http://localhost:5173`).
+## Project Structure
+
+```
+.
+├── client/           # React Frontend (Vite, TypeScript, PixiJS, MapLibre)
+│   ├── public/
+│   │   ├── components/ # React UI components (e.g., HUD)
+│   │   ├── features/   # Core game logic (e.g., GameCanvas)
+│   │   ├── schemas/    # (Temporary) Duplicated Colyseus schemas
+│   │   └── ...
+│   ├── .env          # Client environment variables (needs creation)
+│   ├── index.html
+│   ├── package.json
+│   └── tsconfig.json
+├── server/           # Colyseus Backend (Node.js, TypeScript)
+│   ├── src/
+│   │   ├── schemas/    # Authoritative Colyseus state schemas
+│   │   ├── ArenaRoom.ts # Main game room logic
+│   │   └── index.ts     # Server entry point
+│   ├── package.json
+│   └── tsconfig.json
+├── .gitignore
+├── README.md         # This file
+└── TASKS.md          # Development task tracking
+```
+
+## Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request. (Placeholder - specific guidelines can be added later).
+
+## License
+
+This project is licensed under the MIT License. (Placeholder - confirm if this is accurate).

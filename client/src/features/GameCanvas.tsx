@@ -47,16 +47,40 @@ function angleLerp(startAngle: number, endAngle: number, factor: number): number
 
 // Helper to get meters per degree longitude at a given latitude
 function metersPerDegreeLngApprox(latitude: number): number {
-    return METERS_PER_DEGREE_LAT_APPROX * Math.cos(latitude * Math.PI / 180);
+    // Ensure latitude is within valid range to avoid Math.cos issues
+    const clampedLat = Math.max(-85, Math.min(85, latitude));
+    const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180);
+    return meters > 1 ? meters : 1; // Avoid returning 0 or negative for extreme latitudes or edge cases
 }
 
-// Approximate conversion from world meters (relative to origin) to Geo coords
+// Convert Geo coords (Lng/Lat) to world meters relative to origin
+function geoToWorld(lng: number, lat: number): [number, number] { // [x_meters, y_meters]
+    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin latitude for approximation
+    const deltaLng = lng - ORIGIN_LNG;
+    const deltaLat = lat - ORIGIN_LAT;
+    const x_meters = deltaLng * metersPerLng;
+    const y_meters = deltaLat * METERS_PER_DEGREE_LAT_APPROX; // Use constant for latitude
+    return [x_meters, y_meters];
+}
+
+// Convert world meters (relative to origin) back to approximate Geo coords
 function worldToGeo(x_meters: number, y_meters: number): [number, number] { // [lng, lat]
     const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin lat for approximation
-    if (!isFinite(metersPerLng) || metersPerLng === 0) return [ORIGIN_LNG, ORIGIN_LAT]; // Avoid division by zero
+    if (!isFinite(metersPerLng) || metersPerLng === 0) {
+        console.warn("worldToGeo: Invalid metersPerLng, returning origin");
+        return [ORIGIN_LNG, ORIGIN_LAT]; // Avoid division by zero
+    }
     const deltaLng = x_meters / metersPerLng;
     const deltaLat = y_meters / METERS_PER_DEGREE_LAT_APPROX;
-    return [ORIGIN_LNG + deltaLng, ORIGIN_LAT + deltaLat];
+    const resultLng = ORIGIN_LNG + deltaLng;
+    const resultLat = ORIGIN_LAT + deltaLat;
+
+    // Basic sanity check for resulting coordinates
+    if (!isFinite(resultLng) || !isFinite(resultLat) || Math.abs(resultLat) > 90) {
+        console.warn(`worldToGeo: Calculation resulted in invalid coordinates (${resultLng}, ${resultLat}) from input (${x_meters}, ${y_meters}). Returning origin.`);
+        return [ORIGIN_LNG, ORIGIN_LAT];
+    }
+    return [resultLng, resultLat];
 }
 
 // --- Component ---
@@ -134,11 +158,16 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
             if (playerState && isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
                 try {
+                    // Use worldToGeo to get the target LngLat for this player
                     const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
+                    if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat from worldToGeo for player " + sessionId);
+
+                    // Project the LngLat to screen coordinates
                     const targetScreenPos = currentMap.project([targetLng, targetLat]);
-                    if (!isFinite(targetScreenPos?.x) || !isFinite(targetScreenPos?.y)) {
-                         throw new Error("Invalid projected screen pos in gameLoop");
+                    if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
+                         throw new Error("Invalid projected screen pos in gameLoop for player " + sessionId);
                     }
+                    // Keep target rotation calculation as is
                     const targetRotation = -playerState.heading + Math.PI / 2;
 
                     // Interpolate Sprite towards target
@@ -206,8 +235,9 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             const localPlayerState = allPlayersServerState.current[room.sessionId];
             if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
                  try {
+                    // Use worldToGeo to get the target LngLat for the map center
                     const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
-                    if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat");
+                    if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat from worldToGeo");
                     mapTargetCenter.current = new LngLat(targetLng, targetLat);
                  } catch(e) {
                     console.warn("Error calculating map target center:", e);
@@ -242,16 +272,31 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 if (!incomingPlayerIds.has(sessionId)) { // Use incomingPlayerIds for check
                     console.log(`Removing sprite for player who left: ${sessionId}`);
                     const spriteToRemove = otherPlayerSprites.current[sessionId];
-                    if (spriteToRemove) { /* ... destroy sprite ... */ }
+                    if (spriteToRemove) {
+                        // Actually destroy the Pixi sprite and remove from stage
+                        spriteToRemove.destroy({ children: true }); // Destroy sprite and its children if any
+                    }
                     delete otherPlayerSprites.current[sessionId];
                 }
             });
         });
 
-        room.onLeave((code: number) => { /* ... */ });
-        room.onError((code: number, message?: string) => { /* ... */ });
+        room.onLeave((code: number) => {
+            console.log(`Left room with code: ${code}`);
+            gameRoom.current = null; // Clear room ref on leave
+            allPlayersServerState.current = {}; // Clear state
+            // Consider additional cleanup if needed
+        });
 
-    } catch (e) { console.error("Failed to join or create room:", e); }
+        room.onError((code: number, message?: string) => {
+            console.error(`Room error (code ${code}): ${message}`);
+            // Potentially try to reconnect or show an error message
+        });
+
+    } catch (e) {
+        console.error("Failed to join or create room:", e);
+        // Handle connection error (e.g., show message, retry logic)
+    }
   }, []);
 
   // useEffect (setup/cleanup) - Restore connection call, sprite creation

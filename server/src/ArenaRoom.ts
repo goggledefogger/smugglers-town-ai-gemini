@@ -45,16 +45,17 @@ export class ArenaRoom extends Room<ArenaState> {
 
   // Called when a client joins the room
   onJoin (client: Client, options: any) {
-    console.log(`[ArenaRoom] Client joined: ${client.sessionId}`, options);
+    console.log(client.sessionId, "joined!");
 
+    // create Player instance
     const player = new Player();
-    player.name = options.playerName || `Guest_${client.sessionId.substring(0, 4)}`;
-    // Initialize position in meters around origin (0,0)
-    const spawnRadiusMeters = 10;
-    player.x = (Math.random() * 2 - 1) * spawnRadiusMeters;
-    player.y = (Math.random() * 2 - 1) * spawnRadiusMeters;
-    player.heading = 0; // Pointing East initially
-    player.team = (this.state.players.size % 2 === 0) ? 'blue' : 'red';
+
+    // Initial state
+    player.name = `Player ${client.sessionId.substring(0, 3)}`; // Example name
+    player.x = 0; // Start at origin X
+    player.y = 0; // Start at origin Y
+    player.heading = 0; // Facing 'north' (up on screen initially)
+    player.team = (this.state.players.size % 2 === 0) ? 'Red' : 'Blue'; // Example team assignment
 
     this.state.players.set(client.sessionId, player);
     this.playerInputs.set(client.sessionId, { dx: 0, dy: 0 });

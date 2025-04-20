@@ -4,8 +4,11 @@ import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Client, Room } from 'colyseus.js'; // Re-enabled
 import { v4 as uuidv4 } from 'uuid'; // Import uuid
-import HUD from '../components/HUD'; // Re-enabled
+import HUD from '../components/HUD'; // Corrected import style for default export
+import AIControls from '../components/AIControls'; // Import the new component
 import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Re-enabled
+import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, ORIGIN_LNG } from '../utils/coordinateUtils'; // Corrected path to assumed utils dir
+import { SessionStorageKeys } from './constants'; // Removed broken import
 
 // Map and Style
 // Read style URL from environment variable
@@ -17,10 +20,10 @@ if (!MAP_STYLE_URL) {
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
 const INITIAL_ZOOM = 17; // Zoom closer
 
-// World Origin (matches initial map center)
-const ORIGIN_LNG = INITIAL_CENTER[0];
-const ORIGIN_LAT = INITIAL_CENTER[1];
-const METERS_PER_DEGREE_LAT_APPROX = 111320;
+// World Origin constants moved to coordinateUtils
+// const ORIGIN_LNG = INITIAL_CENTER[0];
+// const ORIGIN_LAT = INITIAL_CENTER[1];
+// const METERS_PER_DEGREE_LAT_APPROX = 111320;
 
 // Game Constants - Focus on Pixel Speed for now
 // const MAX_SPEED_MPS = 14; // Target real-world speed (for later)
@@ -45,7 +48,8 @@ const BASE_DISTANCE = 150; // Meters from origin along X axis
 const Y_OFFSET = 5; // Small vertical offset from center line
 const BASE_RADIUS = 40; // Meters (for scoring/rendering)
 
-// --- Helper Functions ---
+// --- Helper Functions --- (REMOVED - Now Imported)
+/*
 function lerp(start: number, end: number, factor: number): number {
   return start + factor * (end - start);
 }
@@ -93,6 +97,7 @@ function worldToGeo(x_meters: number, y_meters: number): [number, number] { // [
     }
     return [resultLng, resultLat];
 }
+*/
 
 // Helper to draw the car sprite
 function drawCar(graphics: PIXI.Graphics, team: string) {
@@ -171,13 +176,25 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
     if (!initialPlacementDone.current) {
         console.log("GameLoop: Performing initial placement...");
         // Ensure gameRoom is available here
-        if (!gameRoom.current) return; // Exit if room not ready
+        if (!gameRoom.current || !gameRoom.current.sessionId) {
+            console.log("  [Initial Placement] Skipping: Game room or session ID not ready.");
+            return;
+        }
 
-        const localPlayerState = allPlayersServerState.current[gameRoom.current.sessionId];
+        const localSessionId = gameRoom.current.sessionId;
+        const localPlayerState = allPlayersServerState.current[localSessionId];
+
+        // --- Add Logging ---
+        console.log(`  [Initial Placement] Checking state for local player: ${localSessionId}`);
+        console.log(`  [Initial Placement] allPlayersServerState:`, JSON.stringify(allPlayersServerState.current)); // Log the whole state map
+        console.log(`  [Initial Placement] localPlayerState found:`, localPlayerState); // Log the specific player state found
+        // ---------------------
 
         if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
+            console.log(`  [Initial Placement] Local state valid: Pos (${localPlayerState.x.toFixed(1)}, ${localPlayerState.y.toFixed(1)})`); // Log valid state info
             try {
                 const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                console.log(`  [Initial Placement] worldToGeo result: (${targetLng}, ${targetLat})`); // Log worldToGeo output
                 if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat from worldToGeo for initial center");
 
                 // Define currentMap, currentStage, currentScreen here
@@ -248,7 +265,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 initialPlacementDone.current = false;
             }
         } else {
-            mapTargetCenter.current = null; // Clear target if local state is invalid
+            console.log("  [Initial Placement] Skipping: Local player state not found or invalid."); // Log reason for skipping
+            // mapTargetCenter.current = null; // Keep this commented unless needed
         }
     }
     // --- End Initial Placement Logic ---
@@ -433,8 +451,18 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         gameRoom.current = room;
         console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}, TabId: ${tabId}`);
 
+        // --- Add flag to track if first state change received ---
+        let firstStateReceived = false;
+
         room.onStateChange((state: ArenaState) => {
             if (!mapInstance.current || !pixiApp.current || !isMounted.current) return;
+
+            // --- Log first state received ---
+            if (!firstStateReceived) {
+                console.log("[onStateChange] First state received:", JSON.stringify(state.toJSON()));
+                firstStateReceived = true;
+            }
+            // ----------------------------------
 
             const incomingPlayerIds = new Set<string>();
             const newState: { [sessionId: string]: Player } = {};
@@ -694,13 +722,29 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       };
   }, [connectToServer, gameLoop, handleKeyDown, handleKeyUp]); // Restore dependencies
 
+  // Handlers for adding AI
+  const handleAddAi = (team: 'Red' | 'Blue') => {
+    if (gameRoom.current && gameRoom.current.connection.isOpen) {
+      console.log(`Sending request to add ${team} AI...`);
+      gameRoom.current.send("add_ai", { team });
+    } else {
+      console.warn("Game room not connected, cannot add AI.");
+    }
+  };
+
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
-      <div ref={mapContainer} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} />
-      <div ref={pixiContainer} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100vh' }} className="z-0">
+      {/* Map & Canvas Layers (Low Z-Index) */}
+      <div ref={mapContainer} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} className="z-10" />
+      <div ref={pixiContainer} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} className="z-20">
         {/* Pixi canvas will be appended here */}
       </div>
-      <HUD redScore={scores.red} blueScore={scores.blue} /> {/* Pass scores to HUD */}
+
+      {/* UI Elements (High Z-Index) */}
+      <HUD redScore={scores.red} blueScore={scores.blue} /> {/* HUD positioned by its own styles */}
+      <AIControls onAddAi={handleAddAi} /> {/* Use the new component */}
+
+      {/* Debug Overlay could also go here with appropriate z-index and positioning */}
     </div>
   );
 };

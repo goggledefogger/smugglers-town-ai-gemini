@@ -17,6 +17,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Initial state definition for scores and a single generic pickup item.
 - Server-side collision detection (player-item, player-player, player-base).
 - Core gameplay loop: Generic item pickup, player-vs-player item stealing, scoring by returning the item to team base.
+- Basic server-side AI opponent with simple targeting logic (pursues item carrier or item, returns to base).
 
 ### Planned / Future
 - Client-side prediction for improved input responsiveness.
@@ -108,7 +109,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 ├── server/           # Colyseus Backend (Node.js, TypeScript)
 │   ├── src/
 │   │   ├── schemas/    # Authoritative Colyseus state schemas
-│   │   ├── ArenaRoom.ts # Main game room logic
+│   │   ├── ArenaRoom.ts # Main game room logic, including player lifecycle, input handling, physics, collision detection, game rules, and AI control.
 │   │   └── index.ts     # Server entry point
 │   ├── package.json
 │   └── tsconfig.json

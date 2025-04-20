@@ -15,6 +15,7 @@ export class FlagState extends Schema {
   @type("number") x: number = NaN; // Meters (NaN when carried)
   @type("number") y: number = NaN; // Meters (NaN when carried)
   @type("string") carrierId: string | null = null; // Session ID of player carrying
+  @type("number") lastStealTimestamp: number = 0; // Server time (ms) of last steal
 }
 
 export class ArenaState extends Schema {

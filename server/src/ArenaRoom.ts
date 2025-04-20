@@ -20,6 +20,7 @@ const SPAWN_RADIUS = 10; // Max distance from origin (0,0) for player spawn
 const BASE_DISTANCE = 150; // Meters from origin along X axis
 const Y_OFFSET = 5; // Small vertical offset from center line
 const ITEM_START_POS = { x: 0, y: 0 }; // Place item at the origin
+const STEAL_COOLDOWN_MS = 500; // Cooldown in milliseconds after a steal
 const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET };
 const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET };
 
@@ -199,6 +200,7 @@ export class ArenaRoom extends Room<ArenaState> {
       this.state.item.x = ITEM_START_POS.x;
       this.state.item.y = ITEM_START_POS.y;
       this.state.item.carrierId = null;
+      this.state.item.lastStealTimestamp = 0; // Reset cooldown timer
   }
 
   // Game loop update function (server-authoritative)
@@ -259,9 +261,9 @@ export class ArenaRoom extends Room<ArenaState> {
 
         // --- Collision Checks for this player ---
         const item = this.state.item; // Reference the single item
-        let isCarryingItem = item.carrierId === sessionId;
+        const isCarryingItem = item.carrierId === sessionId;
 
-        // 1. Item Pickup Check
+        // 1. Item Pickup Check (Done per-player)
         if (!isCarryingItem && (item.status === 'atBase' || item.status === 'dropped')) {
             const dSq = distSq(player.x, player.y, item.x, item.y);
             if (dSq <= PICKUP_RADIUS_SQ) {
@@ -274,53 +276,92 @@ export class ArenaRoom extends Room<ArenaState> {
             }
         }
 
-        // 2. Player-Player Collision (Stealing Check)
+        // 2. Player-Player Collision (Stealing Check) // REMOVED FROM HERE
+        /*
         if (isCarryingItem) {
              for (let j = index + 1; j < playerIds.length; j++) {
-                 const otherPlayerId = playerIds[j];
-                 const otherPlayer = this.state.players.get(otherPlayerId)!;
-
-                 // Check if they are opponents and colliding
-                 if (player.team !== otherPlayer.team) {
-                     const dSq = distSq(player.x, player.y, otherPlayer.x, otherPlayer.y);
-                     if (dSq <= PLAYER_COLLISION_RADIUS_SQ) {
-                         console.log(`[${otherPlayerId}] Player ${otherPlayer.name} (${otherPlayer.team}) STOLE item from [${sessionId}] Player ${player.name} (${player.team})!`);
-                         item.carrierId = otherPlayerId; // Transfer item carrier
-                         isCarryingItem = false; // Current player is no longer carrying
-                         break; // Steal happened, move to next player's collision checks
-                     }
-                 }
+                 // ... old logic ...
              }
         }
+        */
 
-        // 3. Base Collision (Scoring Check)
-        if (isCarryingItem) {
-            let targetBasePos = null;
+        // 3. Base Collision (Scoring Check) (Done per-player)
+        if (isCarryingItem) { // Re-check based on carrierId *before* score check
+             let targetBasePos = null;
 
-            // Player scores by bringing the item to THEIR base
-            if (player.team === 'Red') { targetBasePos = RED_BASE_POS; }
-            else if (player.team === 'Blue') { targetBasePos = BLUE_BASE_POS; }
+             // Player scores by bringing the item to THEIR base
+             if (player.team === 'Red') { targetBasePos = RED_BASE_POS; }
+             else if (player.team === 'Blue') { targetBasePos = BLUE_BASE_POS; }
 
-            if (targetBasePos) {
-                 const dSq = distSq(player.x, player.y, targetBasePos.x, targetBasePos.y);
-                 if (dSq <= BASE_RADIUS_SQ) {
-                     console.log(`[${sessionId}] Player ${player.name} (${player.team}) SCORED with the item!`);
-                     // Increment score
-                     if (player.team === 'Red') this.state.redScore++;
-                     else this.state.blueScore++;
-                     console.log(`Scores: Red ${this.state.redScore} - Blue ${this.state.blueScore}`);
-                     // Reset the item
-                     this.resetItem();
-                     isCarryingItem = false; // Player no longer carrying
-                 }
-            }
+             if (targetBasePos) {
+                  const dSq = distSq(player.x, player.y, targetBasePos.x, targetBasePos.y);
+                  if (dSq <= BASE_RADIUS_SQ) {
+                      console.log(`[${sessionId}] Player ${player.name} (${player.team}) SCORED with the item!`);
+                      // Increment score
+                      if (player.team === 'Red') this.state.redScore++;
+                      else this.state.blueScore++;
+                      console.log(`Scores: Red ${this.state.redScore} - Blue ${this.state.blueScore}`);
+                      // Reset the item
+                      this.resetItem();
+                      // isCarryingItem = false; // No longer needed to modify here
+                  }
+             }
         }
         // --- End Collision Checks ---
 
-    }); // End player loop
+    }); // End player movement loop
+
+    // --- Player-Player Collision / Stealing (Check all pairs AFTER movement) ---
+    const item = this.state.item;
+    const currentTime = this.clock.currentTime; // Get current server time
+
+    // Check if item is carried AND cooldown has expired
+    if (item.status === 'carried' && item.carrierId && currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+        for (let i = 0; i < playerIds.length; i++) {
+            // if (itemStolenThisTick) break; // Cooldown check replaces this
+
+            for (let j = i + 1; j < playerIds.length; j++) {
+                const playerA_Id = playerIds[i];
+                const playerB_Id = playerIds[j];
+                const playerA = this.state.players.get(playerA_Id)!;
+                const playerB = this.state.players.get(playerB_Id)!;
+
+                if (!playerA || !playerB || playerA.team === playerB.team) {
+                    continue; // Skip if players don't exist or are on the same team
+                }
+
+                // Check distance
+                const dSq = distSq(playerA.x, playerA.y, playerB.x, playerB.y);
+                if (dSq <= PLAYER_COLLISION_RADIUS_SQ) {
+                    // Collision between opponents!
+                    if (item.carrierId === playerA_Id) {
+                        // Player B steals from Player A
+                        console.log(`[${playerB_Id}] Player ${playerB.name} (${playerB.team}) STOLE item from [${playerA_Id}] Player ${playerA.name} (${playerA.team})!`);
+                        item.carrierId = playerB_Id;
+                        item.lastStealTimestamp = currentTime; // Set timestamp
+                        // itemStolenThisTick = true; // No longer needed
+                        break; // Inner loop (check next i)
+                    } else if (item.carrierId === playerB_Id) {
+                        // Player A steals from Player B
+                        console.log(`[${playerA_Id}] Player ${playerA.name} (${playerA.team}) STOLE item from [${playerB_Id}] Player ${playerB.name} (${playerB.team})!`);
+                        item.carrierId = playerA_Id;
+                        item.lastStealTimestamp = currentTime; // Set timestamp
+                        // itemStolenThisTick = true; // No longer needed
+                        break; // Inner loop (check next i)
+                    }
+                }
+            }
+            // Break outer loop if a steal occurred in the inner loop
+            if (item.lastStealTimestamp === currentTime) {
+                break;
+            }
+        }
+    }
+    // ------------------------------------------------------------------------
 
     // --- Update Carried Item Position ---
-    const item = this.state.item;
+    // Use the potentially updated carrierId from stealing logic
+    // const item = this.state.item; // Already defined above
     if (item.status === 'carried' && item.carrierId) {
         const carrier = this.state.players.get(item.carrierId);
         if (carrier) {

@@ -40,9 +40,6 @@ const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
 // Session Storage Key (Changed from Local Storage)
 const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId';
 
-// Default initial state for flags (adjust if needed)
-const initialFlagState = (): FlagState => new FlagState();
-
 // --- Helper Functions ---
 function lerp(start: number, end: number, factor: number): number {
   return start + factor * (end - start);
@@ -125,15 +122,13 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const mapTargetCenter = useRef<LngLat | null>(null);
   const colyseusClient = useRef<Client | null>(null);
   const gameRoom = useRef<ArenaRoomType | null>(null);
-  // Add refs for flag sprites
   const redFlagSprite = useRef<PIXI.Graphics | null>(null);
   const blueFlagSprite = useRef<PIXI.Graphics | null>(null);
+  const initialStateProcessed = useRef<boolean>(false);
+  const initialPlacementDone = useRef<boolean>(false);
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
-  // Add state for flags
-  const [redFlagState, setRedFlagState] = useState<FlagState>(initialFlagState);
-  const [blueFlagState, setBlueFlagState] = useState<FlagState>(initialFlagState);
 
   // Debug refs for local-only panning test
   const debugLocalX = useRef<number>(0);
@@ -165,15 +160,23 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         }
     }
 
-    // --- Sprite Interpolation / Updates ---
+    // --- Sprite Interpolation (Projecting Target Here) ---
     if (pixiApp.current && mapInstance.current) {
+        // Define currentMap here to be accessible within the whole block
         const currentMap = mapInstance.current;
 
-        // --- Update Player Sprites ---
+        // Log keys once per frame before loop if needed
+        // console.log("Other Sprites Keys:", Object.keys(otherPlayerSprites.current));
+
+        // Iterate using Object.keys
         Object.keys(allPlayersServerState.current).forEach((sessionId: string) => {
             const playerState = allPlayersServerState.current[sessionId];
             const isLocalPlayer = sessionId === gameRoom.current?.sessionId;
             const sprite = isLocalPlayer ? carSprite.current : otherPlayerSprites.current[sessionId];
+
+            // *** DEBUG LOGGING START ***
+            // console.log(`[GameLoop] Processing SID: ${sessionId}, Local?: ${isLocalPlayer}, Room SID: ${gameRoom.current?.sessionId}, Sprite Found?: ${!!sprite}, OtherSpriteKeys: ${JSON.stringify(Object.keys(otherPlayerSprites.current))}`);
+            // *** DEBUG LOGGING END ***
 
             if (!sprite) {
                 if (!isLocalPlayer) console.warn(`[GameLoop] Sprite missing for remote player: ${sessionId}`);
@@ -216,42 +219,76 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         });
 
         // --- Update Flag Sprites ---
-        const flagsToUpdate: { state: FlagState; sprite: PIXI.Graphics | null }[] = [
-            { state: redFlagState, sprite: redFlagSprite.current },
-            { state: blueFlagState, sprite: blueFlagSprite.current },
+        // Read directly from Colyseus state, not React state
+        const flagsToUpdate: { serverState: FlagState | undefined; sprite: PIXI.Graphics | null }[] = [
+            { serverState: gameRoom.current?.state.redFlag, sprite: redFlagSprite.current },
+            { serverState: gameRoom.current?.state.blueFlag, sprite: blueFlagSprite.current },
         ];
 
-        flagsToUpdate.forEach(({ state, sprite }) => {
-            if (!sprite) return;
-
-            // Only show flag sprite if it's at base or dropped
-            const shouldBeVisible = state.status === 'atBase' || state.status === 'dropped';
-
-            if (shouldBeVisible && isFinite(state.x) && isFinite(state.y)) {
-                try {
-                    const [targetLng, targetLat] = worldToGeo(state.x, state.y);
-                    const targetScreenPos = currentMap.project([targetLng, targetLat]);
-
-                    if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
-                        throw new Error(`Invalid projected screen pos for flag ${state.team}`);
-                    }
-
-                    // Position flag directly (no interpolation for now)
-                    sprite.x = targetScreenPos.x;
-                    sprite.y = targetScreenPos.y;
-                    sprite.visible = true;
-                } catch (e) {
-                    console.warn(`Error updating flag sprite ${state.team}:`, e);
-                    sprite.visible = false;
-                }
-            } else {
-                // Hide if carried, status is invalid, or position is invalid
-                sprite.visible = false;
+        flagsToUpdate.forEach(({ serverState: state, sprite }) => { // Use serverState aliased as state
+            if (!sprite || !state) { // Check both sprite and serverState existence
+                if(sprite) sprite.visible = false; // Hide sprite if state is missing
+                return;
             }
-        });
+
+            // Logic uses 'state' (now directly from Colyseus state) here...
+            let shouldBeVisible = false;
+            let targetX = sprite.x;
+            let targetY = sprite.y;
+
+            if (state.status === 'atBase' || state.status === 'dropped') {
+                 // Render at its world position
+                if (isFinite(state.x) && isFinite(state.y)) {
+                    try {
+                        const [targetLng, targetLat] = worldToGeo(state.x, state.y);
+                        // Use currentMap which is now in scope
+                        const targetScreenPos = currentMap.project([targetLng, targetLat]);
+                        if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
+                            throw new Error(`Invalid projected screen pos for flag ${state.team}`);
+                        }
+                        targetX = targetScreenPos.x;
+                        targetY = targetScreenPos.y;
+                        shouldBeVisible = true;
+                    } catch (e) {
+                        console.warn(`Error positioning flag sprite ${state.team} (update):`, e);
+                        shouldBeVisible = false;
+                    }
+                }
+            } else if (state.status === 'carried' && state.carrierId) {
+                 // Render attached to carrier (same logic as initial placement)
+                 // Add null check for gameRoom.current
+                 const carrierSprite = state.carrierId === gameRoom.current?.sessionId
+                    ? carSprite.current
+                    : otherPlayerSprites.current[state.carrierId];
+
+                 if (carrierSprite && carrierSprite.visible) {
+                    const offsetX = 0;
+                    const offsetY = CAR_HEIGHT / 2 + 5;
+                    const angle = carrierSprite.rotation;
+                    const rotatedOffsetX = offsetX * Math.cos(angle) - offsetY * Math.sin(angle);
+                    const rotatedOffsetY = offsetX * Math.sin(angle) + offsetY * Math.cos(angle);
+                    targetX = carrierSprite.x + rotatedOffsetX;
+                    targetY = carrierSprite.y + rotatedOffsetY;
+                    shouldBeVisible = true;
+                 } else {
+                    shouldBeVisible = false;
+                 }
+            }
+
+            // Apply visibility and position (using interpolation now for subsequent frames)
+            sprite.visible = shouldBeVisible;
+            if (shouldBeVisible) {
+                // Use lerp for subsequent updates
+                 // Assuming lerpFactor is defined earlier in gameLoop
+                sprite.x = lerp(sprite.x, targetX, lerpFactor);
+                sprite.y = lerp(sprite.y, targetY, lerpFactor);
+            }
+        }); // End of flagsToUpdate.forEach
         // -------------------------
-    }
-  }, []);
+
+    } // End of if (pixiApp.current && mapInstance.current)
+
+  }, []); // End of gameLoop useCallback
 
   // Input Handlers (Keep)
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -304,17 +341,15 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             // Update state for current players
             state.players.forEach((player, sessionId) => {
                 incomingPlayerIds.add(sessionId);
+                // Store the actual Player instance
                 newState[sessionId] = player;
             });
+
+            // Update the ref object for player states
             allPlayersServerState.current = newState;
 
             // Update scores state
             setScores({ red: state.redScore, blue: state.blueScore });
-
-            // --- Update Flag State ---
-            if (state.redFlag) setRedFlagState(state.redFlag);
-            if (state.blueFlag) setBlueFlagState(state.blueFlag);
-            // -----------------------
 
             // Update Map Target Center based on local player
             const localPlayerState = allPlayersServerState.current[room.sessionId];
@@ -422,17 +457,17 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
             // Create placeholder car sprite (will be colored later by onStateChange)
             console.log("Setting up Pixi stage...");
-            // --- Player Sprite Placeholder ---
-            const carGfx = new PIXI.Graphics();
+            const carGfx = new PIXI.Graphics(); // Create empty graphics
+            // Set pivot and initial position/visibility
             carGfx.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
-            carGfx.x = -1000; carGfx.y = -1000;
-            carGfx.visible = false;
+            carGfx.x = -1000; carGfx.y = -1000; // Start off-screen
+            carGfx.visible = false; // Hide until first state update colors it
             app!.stage.addChild(carGfx);
             carSprite.current = carGfx;
             console.log("Car sprite placeholder added.");
 
-            // --- Flag Sprite Placeholders ---
-            const flagSize = 15;
+            // --- Restore Flag Sprite Placeholders ---
+            const flagSize = 30; // Increased size
             // Red Flag (Diamond Shape)
             const redFlagGfx = new PIXI.Graphics()
                 .poly([0, -flagSize, flagSize, 0, 0, flagSize, -flagSize, 0]).fill(0xff0000) // Red diamond
@@ -450,7 +485,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             app!.stage.addChild(blueFlagGfx);
             blueFlagSprite.current = blueFlagGfx;
             console.log("Flag sprite placeholders added.");
-            // -------------------------------
+            // ---------------------------------------
 
             app!.ticker.add(gameLoop);
             tickerAdded = true;

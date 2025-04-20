@@ -1,6 +1,6 @@
 # Smuggler's Town AI
 
-A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, and Colyseus. Players control vehicles on a real-world map, aiming to implement Capture the Flag (CTF) style gameplay.
+A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, and Colyseus. Players control vehicles on a real-world map, competing to retrieve items and return them to their base.
 
 ## Features
 
@@ -11,15 +11,19 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Server-authoritative movement with client-side interpolation for smoothness.
 - Keyboard controls (WASD/Arrows) for vehicle movement.
 - Meter-based coordinate system on the server, translated to GeoJSON for map display.
+- Client converts server coordinates to GeoJSON, uses MapLibre projection for Pixi sprite placement, and handles initial synchronization on refresh.
 - Basic client-server structure with TypeScript on both ends.
+- Team assignment with persistence across refreshes (per browser tab).
+- Initial state definition for scores and generic pickup items (flags/toilets).
+- Collision-based pickup of items.
 
 ### Planned / Future
-- Capture the Flag (CTF) game mechanics (bases, flags, scoring).
+- Core game logic: Carrying items, scoring by returning items to team base.
 - Client-side prediction for improved input responsiveness.
-- Server-side collision detection.
+- Server-side collision detection (player-base, player-player).
 - Simple AI opponents.
-- Improved HUD with game state display.
-- Enhanced visuals and sound effects.
+- Improved HUD with game state display (timer, etc.).
+- Refined visuals (Golden Toilet item, smoke effects) and sound effects.
 - Shared code strategy (monorepo or shared package) to avoid schema duplication.
 - Deployment configuration.
 

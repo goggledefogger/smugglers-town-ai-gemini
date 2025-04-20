@@ -6,6 +6,9 @@ const MAX_SPEED_WORLD = 200; // m/s (~720 kph / 450 mph)
 const ACCEL_RATE_WORLD = 15; // Factor per second - Reduced for smooth lerp!
 const TURN_SMOOTH_WORLD = 12; // Factor per second
 const DRAG_FACTOR = 0.1; // Coefficient for linear drag (higher = more drag)
+const PICKUP_RADIUS = 30; // Meters (Increased)
+const PICKUP_RADIUS_SQ = PICKUP_RADIUS * PICKUP_RADIUS; // Use squared distance for efficiency
+const SPAWN_RADIUS = 10; // Max distance from origin (0,0) for player spawn
 
 // Helper function (can be moved to shared location)
 function lerp(start: number, end: number, factor: number): number {
@@ -41,27 +44,29 @@ export class ArenaRoom extends Room<ArenaState> {
 
     // Initialize Flags
     const baseDistance = 150; // Meters from origin along X axis
+    const yOffset = 5; // Small vertical offset from center line
     // Red Flag (belongs to Red team, starts at Red base on -X axis)
     this.state.redFlag.team = "Red";
     this.state.redFlag.status = "atBase";
     this.state.redFlag.x = -baseDistance;
-    this.state.redFlag.y = 0;
+    this.state.redFlag.y = yOffset;
     this.state.redFlag.carrierId = null;
     // Blue Flag (belongs to Blue team, starts at Blue base on +X axis)
     this.state.blueFlag.team = "Blue";
     this.state.blueFlag.status = "atBase";
     this.state.blueFlag.x = baseDistance;
-    this.state.blueFlag.y = 0;
+    this.state.blueFlag.y = -yOffset; // Offset in opposite direction for symmetry
     this.state.blueFlag.carrierId = null;
     console.log(`Initialized flags: Red at (${this.state.redFlag.x}, ${this.state.redFlag.y}), Blue at (${this.state.blueFlag.x}, ${this.state.blueFlag.y})`);
 
     // --- Message Handler for Input ---
     this.onMessage("input", (client, message: { dx: number, dy: number }) => {
-      // Store the latest input direction for this client
+      // Log received input // COMMENT OUT
+      // if (message.dx !== 0 || message.dy !== 0) {
+      //   console.log(`[${client.sessionId}] Received Input: dx=${message.dx}, dy=${message.dy}`);
+      // }
       this.playerInputs.set(client.sessionId, { dx: message.dx, dy: message.dy });
-      // We could add validation here
     });
-    // ----------------------------------
 
     // Set up the main game loop (target 60Hz)
     this.setSimulationInterval((deltaTime) => this.update(deltaTime / 1000), 1000 / 60); // ~16.6ms interval
@@ -109,8 +114,11 @@ export class ArenaRoom extends Room<ArenaState> {
     // Create Player instance
     const player = new Player();
     player.name = `Player ${client.sessionId.substring(0, 3)}`;
-    player.x = 0;
-    player.y = 0;
+    // Spawn player randomly within SPAWN_RADIUS of origin
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.random() * SPAWN_RADIUS;
+    player.x = Math.cos(angle) * radius;
+    player.y = Math.sin(angle) * radius;
     player.heading = 0;
     player.team = assignedTeam; // Use the determined team
 
@@ -166,8 +174,31 @@ export class ArenaRoom extends Room<ArenaState> {
     }
 
     this.state.players.forEach((player, sessionId) => {
-      const input = this.playerInputs.get(sessionId) || { dx: 0, dy: 0 };
-      const velocity = this.playerVelocities.get(sessionId) || { vx: 0, vy: 0 };
+      // Explicitly get input and log retrieval
+      const retrievedInput = this.playerInputs.get(sessionId);
+      // --- Log Raw Retrieved Input --- // COMMENT OUT
+      // console.log(`[${sessionId}] Update Loop - Raw retrieved input: ${JSON.stringify(retrievedInput)}`);
+      // -------------------------------
+      const input = retrievedInput || { dx: 0, dy: 0 };
+      // --- Log Final Input Used --- // COMMENT OUT
+      // if (input.dx !== 0 || input.dy !== 0) {
+      //     console.log(`[${sessionId}] Update Loop - Final input used: dx=${input.dx}, dy=${input.dy}`);
+      // }
+      // --------------------------
+
+      // --- Get or Initialize Velocity Object ---
+      let velocity = this.playerVelocities.get(sessionId);
+      if (!velocity) {
+          velocity = { vx: 0, vy: 0 };
+          this.playerVelocities.set(sessionId, velocity);
+      }
+      // ----------------------------------------
+
+      // --- Log Retrieved Input (already exists) --- // COMMENTED OUT
+      // if (input.dx !== 0 || input.dy !== 0) {
+      //     console.log(`[${sessionId}] Update Loop - Final input used: dx=${input.dx}, dy=${input.dy}`);
+      // }
+      // -------------------------
 
       // Client input: dx = screen right (+1) / left (-1)
       //               dy = screen DOWN (+1) / UP (-1)
@@ -175,6 +206,10 @@ export class ArenaRoom extends Room<ArenaState> {
       //             vy = North (+)
       const inputDirX = input.dx;
       const inputDirY = input.dy;
+
+      // --- Log Input used for Magnitude ---
+      // console.log(`[${sessionId}] Update Loop - Input values for magnitude calc: inputDirX=${inputDirX}, inputDirY=${inputDirY}`); // COMMENTED OUT
+      // ----------------------------------
 
       let magnitude = Math.sqrt(inputDirX * inputDirX + inputDirY * inputDirY);
       let targetWorldDirX = 0;
@@ -186,25 +221,40 @@ export class ArenaRoom extends Room<ArenaState> {
         //                Client Up   (-dy) should be World North (+vy)
         targetWorldDirY = -inputDirY / magnitude;
       }
+      // --- Log Target Direction --- // COMMENTED OUT
+      // console.log(`[${sessionId}] Calculated Target Direction: X=${targetWorldDirX.toFixed(2)}, Y=${targetWorldDirY.toFixed(2)} (from input: dx=${input.dx}, dy=${input.dy})`);
+      // --------------------------
 
       // --- Movement Logic (Meters) ---
       // Apply drag first (proportional to current velocity)
       const dragFactor = 1.0 - Math.min(DRAG_FACTOR * dt, 1.0); // Ensure drag doesn't reverse velocity
+      // Directly modify the velocity object from the map
       velocity.vx *= dragFactor;
       velocity.vy *= dragFactor;
 
-      // Calculate acceleration towards target velocity based on input
+      // Calculate target velocity based on input
       const targetVelX = targetWorldDirX * MAX_SPEED_WORLD;
       const targetVelY = targetWorldDirY * MAX_SPEED_WORLD;
+      // --- Log Target Velocity --- // COMMENTED OUT
+      // console.log(`[${sessionId}] Calculated Target Velocity: X=${targetVelX.toFixed(1)}, Y=${targetVelY.toFixed(1)}`);
+      // --------------------------
       const accelFactor = Math.min(ACCEL_RATE_WORLD * dt, 1.0);
 
+      // Apply acceleration using lerp, directly modifying the velocity object
       velocity.vx = lerp(velocity.vx, targetVelX, accelFactor);
       velocity.vy = lerp(velocity.vy, targetVelY, accelFactor);
+
+      // --- Log Velocities --- // COMMENT OUT
+      // console.log(`[${sessionId}] Updated Velocity: vx=${velocity.vx.toFixed(1)}, vy=${velocity.vy.toFixed(1)}`);
+      // --------------------
 
       // --- Update Position State (Meters) ---
       if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
         player.x += velocity.vx * dt;
         player.y += velocity.vy * dt;
+        // --- Log Position Update --- // COMMENT OUT
+        // console.log(`[${sessionId}] New Position: x=${player.x.toFixed(1)}, y=${player.y.toFixed(1)}`);
+        // -------------------------
       } else {
         console.warn(`[${sessionId}] Invalid velocity (vx:${velocity.vx}, vy:${velocity.vy}), skipping position update.`);
         velocity.vx = 0; // Reset velocity if invalid
@@ -225,10 +275,71 @@ export class ArenaRoom extends Room<ArenaState> {
           console.warn(`[${sessionId}] Invalid targetHeading (${targetHeading}) for player ${sessionId}, skipping rotation update.`);
       }
 
-      // Store updated velocity back
-      this.playerVelocities.set(sessionId, velocity);
-    });
-  }
+      // --- Flag Pickup Collision Check --- // RE-ENABLE LOGGING // Log only on actual pickup
+      const isCarryingFlag = this.state.redFlag.carrierId === sessionId || this.state.blueFlag.carrierId === sessionId;
+      // console.log(`[${sessionId}] Update: Player Pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)}), Carrying: ${isCarryingFlag}`);
+
+      if (!isCarryingFlag) {
+        // Iterate through both flags to check for pickup
+        const flagsToCheck = [this.state.redFlag, this.state.blueFlag];
+        for (const flag of flagsToCheck) {
+             // Check if this flag is available for pickup
+            // console.log(`[${sessionId}] Checking Flag: ${flag.team}, Status: ${flag.status}, Pos: (${flag.x?.toFixed(1)}, ${flag.y?.toFixed(1)})`);
+            if (flag && (flag.status === 'atBase' || flag.status === 'dropped')) {
+                // Check distance
+                const dx = flag.x - player.x;
+                const dy = flag.y - player.y;
+                const distSq = dx * dx + dy * dy;
+                const isInRange = distSq <= PICKUP_RADIUS_SQ;
+
+                // --- DETAILED LOGGING --- // COMMENT OUT
+/*
+                console.log(`[${sessionId}] Pickup Check vs ${flag.team} Flag:
+  Player Pos: (${player.x.toFixed(1)}, ${player.y.toFixed(1)})
+  Flag Status: ${flag.status}
+  Flag Pos: (${flag.x.toFixed(1)}, ${flag.y.toFixed(1)})
+  DistanceSq: ${distSq.toFixed(1)} (RadiusSq: ${PICKUP_RADIUS_SQ})
+  In Range: ${isInRange}`);
+*/
+                // --- END LOGGING ---
+
+                if (isInRange) {
+                    console.log(`[${sessionId}] Player ${player.name} COLLIDED with and picked up ${flag.team} flag!`); // KEEP THIS LOG
+                    flag.status = "carried";
+                    flag.carrierId = sessionId;
+                    flag.x = NaN; // Position irrelevant while carried
+                    flag.y = NaN;
+                    // Optionally set player.hasFlag = flag.team here if added to Player schema
+                    break; // Exit flag check loop after successful pickup
+                }
+            }
+        }
+      }
+      // --- End Flag Pickup Check --- //
+
+    }); // End player loop
+
+    // --- Update Carried Flag Positions ---
+    const flagsToUpdate = [this.state.redFlag, this.state.blueFlag];
+    for (const flag of flagsToUpdate) {
+        if (flag.status === 'carried' && flag.carrierId) {
+            const carrier = this.state.players.get(flag.carrierId);
+            if (carrier) {
+                // Update flag position to match carrier
+                flag.x = carrier.x;
+                flag.y = carrier.y;
+            } else {
+                // Carrier disconnected or doesn't exist? Drop the flag.
+                console.warn(`Carrier ${flag.carrierId} not found for flag ${flag.team}. Dropping flag.`);
+                flag.status = 'dropped';
+                // Keep flag.x/y as they were (last known position)
+                flag.carrierId = null;
+            }
+        }
+    }
+    // -----------------------------------
+
+  } // End update function
 
   // Called when the room is about to be destroyed
   onDispose() {

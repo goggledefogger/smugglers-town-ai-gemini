@@ -1,6 +1,6 @@
 # Smuggler's Town - Feature Implementation
 
-Core gameplay loop and networking implementation for the Real-World Map CTF Racer.
+Core gameplay loop and networking implementation for a real-time multiplayer game where players retrieve items and return them to their base.
 
 ## Completed Tasks
 
@@ -23,28 +23,29 @@ Core gameplay loop and networking implementation for the Real-World Map CTF Race
 - [x] Add `nodemon` for automatic server restarts during development
 - [x] Implement synchronized client-side interpolation (Map center + Local sprite + Remote sprites)
 - [x] Implement rendering/interpolation for other players' sprites
+- [x] Implement correct team assignment and client-side color display
+- [x] Refine server-side movement physics (acceleration, friction, turning) - Added basic drag
+- [x] Add game state elements (scores, generic items/flags) to `ArenaState`
+- [x] Resolve initial sprite positioning/synchronization issues on client refresh
 
 ## In Progress Tasks
 
-- [x] Implement correct team assignment and client-side color display
-- [x] Refine server-side movement physics (acceleration, friction, turning) - Added basic drag
+(Empty)
 
 ## Future Tasks
 
-- [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
+- [ ] Implement server-side collision detection (player-item, player-base, potentially player-player)
+- [ ] Implement core game logic (collision-based item pickup, carrying, scoring at base)
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
-- [ ] Implement server-side collision detection (player-player, player-object)
-- [ ] Add game state elements (pickups, bases, flags, scores, timers) to `ArenaState`
-- [ ] Implement core CTF game logic (picking up, carrying, capturing flags)
+- [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 - [ ] Add simple AI opponents (server-side)
 - [ ] Improve HUD with game state info (score, timer, etc.)
-- [ ] Refine player sprite graphics/animations
-- [ ] Add visual effects (e.g., speed lines, collision sparks)
+- [ ] Refine player sprite graphics/animations (Golden Toilet!)
+- [ ] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)
 - [ ] Deployment configuration (client and server)
 - [ ] Address `npm audit` vulnerabilities
-- [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 
 ## Implementation Plan
 
@@ -55,9 +56,9 @@ The game uses a server-authoritative architecture with client-side interpolation
 
 ### Relevant Files
 
-- ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates. Includes coordinate conversion and interpolation.
+- ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
 - ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, and running the server-side game simulation loop (meter-based physics).
-- ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`.
+- ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `FlagState`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`.
 - ⚠️ `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client. Needs refactoring.
 - ✅ `server/src/index.ts`: Entry point for the Colyseus server setup.
 - ✅ `client/src/main.tsx`: Entry point for the React client application.

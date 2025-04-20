@@ -27,6 +27,8 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Refine server-side movement physics (acceleration, friction, turning) - Added basic drag
 - [x] Add game state elements (scores, generic items/flags) to `ArenaState`
 - [x] Resolve initial sprite positioning/synchronization issues on client refresh
+- [x] Implement server-side collision detection (player-item, player-player, player-base)
+- [x] Implement core game logic (single generic item pickup, player-player item stealing, scoring at own base)
 
 ## In Progress Tasks
 
@@ -34,8 +36,6 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 ## Future Tasks
 
-- [ ] Implement server-side collision detection (player-item, player-base, potentially player-player)
-- [ ] Implement core game logic (collision-based item pickup, carrying, scoring at base)
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 - [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 - [ ] Add simple AI opponents (server-side)
@@ -51,15 +51,15 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 The game uses a server-authoritative architecture with client-side interpolation. The client renders the game world based on state updates received from the server and sends user input.
 
-- **Server (`server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop (`setSimulationInterval`). Player state (`ArenaState.ts`) uses meters relative to a world origin. Handles player connections, input, and authoritative physics calculations.
-- **Client (`client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. It converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates (`lerp`, `angleLerp`) visual elements between state updates for smoothness.
+- **Server (`server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop (`setSimulationInterval`). Player state (`ArenaState.ts`) uses meters relative to a world origin. Handles player connections, input, authoritative physics calculations, collision detection (player-item, player-player, player-base), single item pickup/stealing logic, and scoring logic.
+- **Client (`client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. It converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates (`lerp`, `angleLerp`) visual elements between state updates for smoothness. Contains specific logic in the `gameLoop` to handle correct initial sprite placement after connection/refresh, ensuring map/stage are centered before placing sprites based on the first received server state.
 
 ### Relevant Files
 
 - ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
-- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, and running the server-side game simulation loop (meter-based physics).
-- ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `FlagState`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`.
-- ⚠️ `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client. Needs refactoring.
+- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop, and implementing core game rules (collisions, pickup, stealing, scoring).
+- ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `FlagState`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`. Includes a single generic item.
+- ⚠️ `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client. Needs refactoring to match server (single item).
 - ✅ `server/src/index.ts`: Entry point for the Colyseus server setup.
 - ✅ `client/src/main.tsx`: Entry point for the React client application.
 - ✅ `server/package.json`, `client/package.json`: Project dependencies.

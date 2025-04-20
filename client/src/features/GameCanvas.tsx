@@ -40,6 +40,11 @@ const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
 // Session Storage Key (Changed from Local Storage)
 const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId';
 
+// Mirror Server Game Logic Constants (needed for base rendering)
+const BASE_DISTANCE = 150; // Meters from origin along X axis
+const Y_OFFSET = 5; // Small vertical offset from center line
+const BASE_RADIUS = 40; // Meters (for scoring/rendering)
+
 // --- Helper Functions ---
 function lerp(start: number, end: number, factor: number): number {
   return start + factor * (end - start);
@@ -122,10 +127,12 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const mapTargetCenter = useRef<LngLat | null>(null);
   const colyseusClient = useRef<Client | null>(null);
   const gameRoom = useRef<ArenaRoomType | null>(null);
-  const redFlagSprite = useRef<PIXI.Graphics | null>(null);
-  const blueFlagSprite = useRef<PIXI.Graphics | null>(null);
+  const itemSprite = useRef<PIXI.Graphics | null>(null);
   const initialStateProcessed = useRef<boolean>(false);
   const initialPlacementDone = useRef<boolean>(false);
+  // Refs for static base sprites
+  const redBaseSprite = useRef<PIXI.Graphics | null>(null);
+  const blueBaseSprite = useRef<PIXI.Graphics | null>(null);
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
@@ -160,23 +167,101 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         }
     }
 
-    // --- Sprite Interpolation (Projecting Target Here) ---
+    // --- Initial Placement on First Frame with State ---
+    if (!initialPlacementDone.current) {
+        console.log("GameLoop: Performing initial placement...");
+        // Ensure gameRoom is available here
+        if (!gameRoom.current) return; // Exit if room not ready
+
+        const localPlayerState = allPlayersServerState.current[gameRoom.current.sessionId];
+
+        if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
+            try {
+                const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat from worldToGeo for initial center");
+
+                // Define currentMap, currentStage, currentScreen here
+                const currentMap = mapInstance.current!;
+                const currentStage = pixiApp.current!.stage;
+                const currentScreen = pixiApp.current!.screen;
+
+                // Force Map Center
+                currentMap.setCenter([targetLng, targetLat]);
+                console.log(`  [Initial Placement] Map Center Forced: ${currentMap.getCenter().toArray()}`);
+
+                // Force Stage Center
+                const playerScreenPos = currentMap.project([targetLng, targetLat]);
+                if (!playerScreenPos || !isFinite(playerScreenPos.x) || !isFinite(playerScreenPos.y)) {
+                    throw new Error("Failed to project local player for initial stage centering");
+                }
+                currentStage.pivot.set(playerScreenPos.x, playerScreenPos.y);
+                currentStage.position.set(currentScreen.width / 2, currentScreen.height / 2);
+                console.log(`  [Initial Placement] Stage Centered: Pivot (${playerScreenPos.x.toFixed(0)}, ${playerScreenPos.y.toFixed(0)}), Pos (${currentStage.position.x.toFixed(0)}, ${currentStage.position.y.toFixed(0)})`);
+
+                // Place Player Sprites Directly
+                Object.keys(allPlayersServerState.current).forEach((pId) => {
+                    const pState = allPlayersServerState.current[pId];
+                    // Add null check for gameRoom.current
+                    const sprite = pId === gameRoom.current?.sessionId ? carSprite.current : otherPlayerSprites.current[pId];
+                    if (pState && sprite && isFinite(pState.x) && isFinite(pState.y)) {
+                        try {
+                            const [pLng, pLat] = worldToGeo(pState.x, pState.y);
+                            const screenPos = currentMap.project([pLng, pLat]);
+                             console.log(`    Placing player ${pId} (${pState.team}): Screen (${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`);
+                            sprite.x = screenPos.x;
+                            sprite.y = screenPos.y;
+                            sprite.rotation = -pState.heading + Math.PI / 2;
+                            drawCar(sprite, pState.team); // Ensure correct color
+                            sprite.visible = true;
+                        } catch (placeError) {
+                            console.warn(`    Error placing player ${pId} initially:`, placeError);
+                            if(sprite) sprite.visible = false;
+                        }
+                    }
+                });
+
+                // Place Single Item Sprite Directly
+                // Add null check for gameRoom.current
+                const itemState = gameRoom.current?.state.item;
+                const currentItemSprite = itemSprite.current; // Use single item sprite ref
+                if (itemState && currentItemSprite && (itemState.status === 'atBase' || itemState.status === 'dropped') && isFinite(itemState.x) && isFinite(itemState.y)) {
+                   try {
+                       const [iLng, iLat] = worldToGeo(itemState.x, itemState.y);
+                       const screenPos = currentMap.project([iLng, iLat]);
+                       console.log(`    Placing item: Screen (${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`);
+                       currentItemSprite.x = screenPos.x;
+                       currentItemSprite.y = screenPos.y;
+                       currentItemSprite.visible = true;
+                   } catch (placeError) {
+                       console.warn(`    Error placing item initially:`, placeError);
+                       if(currentItemSprite) currentItemSprite.visible = false;
+                   }
+                } else if (currentItemSprite) {
+                    currentItemSprite.visible = false; // Hide if carried or invalid pos
+                }
+
+                initialPlacementDone.current = true;
+                console.log("GameLoop: Initial placement DONE.");
+                return; // Skip the rest of the loop for this first placement frame
+            } catch (e) {
+                console.warn("Error calculating initial placement:", e);
+                initialPlacementDone.current = false;
+            }
+        } else {
+            mapTargetCenter.current = null; // Clear target if local state is invalid
+        }
+    }
+    // --- End Initial Placement Logic ---
+
+    // --- Regular Update Logic (Interpolation, Input) ---
     if (pixiApp.current && mapInstance.current) {
-        // Define currentMap here to be accessible within the whole block
         const currentMap = mapInstance.current;
 
-        // Log keys once per frame before loop if needed
-        // console.log("Other Sprites Keys:", Object.keys(otherPlayerSprites.current));
-
-        // Iterate using Object.keys
+        // Update Player Sprites
         Object.keys(allPlayersServerState.current).forEach((sessionId: string) => {
             const playerState = allPlayersServerState.current[sessionId];
             const isLocalPlayer = sessionId === gameRoom.current?.sessionId;
             const sprite = isLocalPlayer ? carSprite.current : otherPlayerSprites.current[sessionId];
-
-            // *** DEBUG LOGGING START ***
-            // console.log(`[GameLoop] Processing SID: ${sessionId}, Local?: ${isLocalPlayer}, Room SID: ${gameRoom.current?.sessionId}, Sprite Found?: ${!!sprite}, OtherSpriteKeys: ${JSON.stringify(Object.keys(otherPlayerSprites.current))}`);
-            // *** DEBUG LOGGING END ***
 
             if (!sprite) {
                 if (!isLocalPlayer) console.warn(`[GameLoop] Sprite missing for remote player: ${sessionId}`);
@@ -218,52 +303,45 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             }
         });
 
-        // --- Update Flag Sprites ---
-        // Read directly from Colyseus state, not React state
-        const flagsToUpdate: { serverState: FlagState | undefined; sprite: PIXI.Graphics | null }[] = [
-            { serverState: gameRoom.current?.state.redFlag, sprite: redFlagSprite.current },
-            { serverState: gameRoom.current?.state.blueFlag, sprite: blueFlagSprite.current },
-        ];
+        // --- Update Single Item Sprite ---
+        const itemState = gameRoom.current?.state.item; // Get single item state
+        const currentItemSprite = itemSprite.current; // Use single item sprite ref
 
-        flagsToUpdate.forEach(({ serverState: state, sprite }) => { // Use serverState aliased as state
-            if (!sprite || !state) { // Check both sprite and serverState existence
-                if(sprite) sprite.visible = false; // Hide sprite if state is missing
-                return;
-            }
-
-            // Logic uses 'state' (now directly from Colyseus state) here...
+        if (!currentItemSprite || !itemState) { // Check sprite and state existence
+            if(currentItemSprite) currentItemSprite.visible = false; // Hide sprite if state is missing
+            // return; // Don't return, just skip updating this sprite
+        } else {
+            // Logic uses 'itemState' (directly from Colyseus state) here...
             let shouldBeVisible = false;
-            let targetX = sprite.x;
-            let targetY = sprite.y;
+            let targetX = currentItemSprite.x;
+            let targetY = currentItemSprite.y;
 
-            if (state.status === 'atBase' || state.status === 'dropped') {
+            if (itemState.status === 'atBase' || itemState.status === 'dropped') {
                  // Render at its world position
-                if (isFinite(state.x) && isFinite(state.y)) {
+                if (isFinite(itemState.x) && isFinite(itemState.y)) {
                     try {
-                        const [targetLng, targetLat] = worldToGeo(state.x, state.y);
-                        // Use currentMap which is now in scope
+                        const [targetLng, targetLat] = worldToGeo(itemState.x, itemState.y);
                         const targetScreenPos = currentMap.project([targetLng, targetLat]);
                         if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
-                            throw new Error(`Invalid projected screen pos for flag ${state.team}`);
+                            throw new Error(`Invalid projected screen pos for item`);
                         }
                         targetX = targetScreenPos.x;
                         targetY = targetScreenPos.y;
                         shouldBeVisible = true;
                     } catch (e) {
-                        console.warn(`Error positioning flag sprite ${state.team} (update):`, e);
+                        console.warn(`Error positioning item sprite (update):`, e);
                         shouldBeVisible = false;
                     }
                 }
-            } else if (state.status === 'carried' && state.carrierId) {
-                 // Render attached to carrier (same logic as initial placement)
-                 // Add null check for gameRoom.current
-                 const carrierSprite = state.carrierId === gameRoom.current?.sessionId
+            } else if (itemState.status === 'carried' && itemState.carrierId) {
+                 // Render attached to carrier
+                 const carrierSprite = itemState.carrierId === gameRoom.current?.sessionId
                     ? carSprite.current
-                    : otherPlayerSprites.current[state.carrierId];
+                    : otherPlayerSprites.current[itemState.carrierId];
 
                  if (carrierSprite && carrierSprite.visible) {
                     const offsetX = 0;
-                    const offsetY = CAR_HEIGHT / 2 + 5;
+                    const offsetY = CAR_HEIGHT / 2 + 5; // Position behind carrier
                     const angle = carrierSprite.rotation;
                     const rotatedOffsetX = offsetX * Math.cos(angle) - offsetY * Math.sin(angle);
                     const rotatedOffsetY = offsetX * Math.sin(angle) + offsetY * Math.cos(angle);
@@ -275,16 +353,39 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                  }
             }
 
-            // Apply visibility and position (using interpolation now for subsequent frames)
-            sprite.visible = shouldBeVisible;
+            // Apply visibility and position using lerp
+            currentItemSprite.visible = shouldBeVisible;
             if (shouldBeVisible) {
-                // Use lerp for subsequent updates
-                 // Assuming lerpFactor is defined earlier in gameLoop
-                sprite.x = lerp(sprite.x, targetX, lerpFactor);
-                sprite.y = lerp(sprite.y, targetY, lerpFactor);
+                currentItemSprite.x = lerp(currentItemSprite.x, targetX, lerpFactor);
+                currentItemSprite.y = lerp(currentItemSprite.y, targetY, lerpFactor);
             }
-        }); // End of flagsToUpdate.forEach
-        // -------------------------
+        }
+        // ---------------------------
+
+        // --- Update Base Sprites (Static World Position) ---
+        const baseSprites = [
+            { sprite: redBaseSprite.current, worldPos: { x: -BASE_DISTANCE, y: Y_OFFSET }, color: 'Red' },
+            { sprite: blueBaseSprite.current, worldPos: { x: BASE_DISTANCE, y: -Y_OFFSET }, color: 'Blue' }
+        ];
+
+        baseSprites.forEach(({ sprite, worldPos, color }) => {
+            if (sprite) {
+                 try {
+                    const [baseLng, baseLat] = worldToGeo(worldPos.x, worldPos.y);
+                    const screenPos = currentMap.project([baseLng, baseLat]);
+                    if (!screenPos || !isFinite(screenPos.x) || !isFinite(screenPos.y)) {
+                         throw new Error(`Failed to project ${color} base`);
+                    }
+                    sprite.x = screenPos.x;
+                    sprite.y = screenPos.y;
+                    sprite.visible = true; // Ensure visible
+                 } catch (e) {
+                    console.warn(`Error updating ${color} base sprite position:`, e);
+                    sprite.visible = false;
+                 }
+            }
+        });
+        // --------------------------------------------------
 
     } // End of if (pixiApp.current && mapInstance.current)
 
@@ -466,26 +567,68 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             carSprite.current = carGfx;
             console.log("Car sprite placeholder added.");
 
-            // --- Restore Flag Sprite Placeholders ---
-            const flagSize = 30; // Increased size
-            // Red Flag (Diamond Shape)
-            const redFlagGfx = new PIXI.Graphics()
-                .poly([0, -flagSize, flagSize, 0, 0, flagSize, -flagSize, 0]).fill(0xff0000) // Red diamond
-                .stroke({ width: 1, color: 0xffffff }); // White outline
-            redFlagGfx.pivot.set(0, 0); // Pivot at center
-            redFlagGfx.x = -1000; redFlagGfx.y = -1000; redFlagGfx.visible = false;
-            app!.stage.addChild(redFlagGfx);
-            redFlagSprite.current = redFlagGfx;
-            // Blue Flag (Diamond Shape)
-            const blueFlagGfx = new PIXI.Graphics()
-                .poly([0, -flagSize, flagSize, 0, 0, flagSize, -flagSize, 0]).fill(0x0000ff) // Blue diamond
-                .stroke({ width: 1, color: 0xffffff }); // White outline
-            blueFlagGfx.pivot.set(0, 0);
-            blueFlagGfx.x = -1000; blueFlagGfx.y = -1000; blueFlagGfx.visible = false;
-            app!.stage.addChild(blueFlagGfx);
-            blueFlagSprite.current = blueFlagGfx;
-            console.log("Flag sprite placeholders added.");
-            // ---------------------------------------
+            // --- Create Single Item Sprite Placeholder ---
+            console.log("Setting up single item sprite placeholder...");
+            const itemGfx = new PIXI.Graphics()
+                .circle(0, 0, 15) // Simple circle for the item
+                .fill(0xFFFF00); // Yellow color
+            itemGfx.pivot.set(0, 0); // Pivot at center of circle
+            itemGfx.x = -1000; itemGfx.y = -1000; itemGfx.visible = false;
+            app!.stage.addChild(itemGfx);
+            itemSprite.current = itemGfx;
+            console.log("Item sprite placeholder added.");
+            // ---------------------------------------------
+
+            // --- Create Base Sprites (Static Position) ---
+            console.log("Setting up base sprites...");
+            const baseAlpha = 0.3; // Make them semi-transparent
+
+            // Define base positions (mirroring server constants for now)
+            // const serverRedBasePos = { x: -BASE_DISTANCE, y: Y_OFFSET }; // Don't need pos here
+            // const serverBlueBasePos = { x: BASE_DISTANCE, y: -Y_OFFSET }; // Don't need pos here
+
+            try {
+                // Convert world meters to Geo for projection // REMOVE CONVERSION/PROJECTION
+                // const [redLng, redLat] = worldToGeo(serverRedBasePos.x, serverRedBasePos.y);
+                // const [blueLng, blueLat] = worldToGeo(serverBlueBasePos.x, serverBlueBasePos.y);
+
+                // Project to initial screen coordinates (map should be loaded) // REMOVE PROJECTION
+                // const redScreenPos = mapInstance.current?.project([redLng, redLat]);
+                // const blueScreenPos = mapInstance.current?.project([blueLng, blueLat]);
+
+                // if (!redScreenPos || !blueScreenPos) {
+                //      throw new Error("Could not project base positions during setup");
+                // }
+
+                // Red Base - Create only
+                const redBaseGfx = new PIXI.Graphics()
+                    .circle(0, 0, BASE_RADIUS) // Use server radius
+                    .fill({ color: 0xff0000, alpha: baseAlpha });
+                redBaseGfx.pivot.set(0, 0);
+                redBaseGfx.x = -2000; // Start off-screen
+                redBaseGfx.y = -2000;
+                redBaseGfx.visible = false; // Hide until positioned by gameLoop
+                app!.stage.addChild(redBaseGfx);
+                redBaseSprite.current = redBaseGfx;
+                // console.log(`Red Base added at screen (${redScreenPos.x.toFixed(0)}, ${redScreenPos.y.toFixed(0)})`);
+
+                // Blue Base - Create only
+                const blueBaseGfx = new PIXI.Graphics()
+                    .circle(0, 0, BASE_RADIUS)
+                    .fill({ color: 0x0000ff, alpha: baseAlpha });
+                blueBaseGfx.pivot.set(0, 0);
+                blueBaseGfx.x = -2000; // Start off-screen
+                blueBaseGfx.y = -2000;
+                blueBaseGfx.visible = false; // Hide until positioned by gameLoop
+                app!.stage.addChild(blueBaseGfx);
+                blueBaseSprite.current = blueBaseGfx;
+                // console.log(`Blue Base added at screen (${blueScreenPos.x.toFixed(0)}, ${blueScreenPos.y.toFixed(0)})`);
+                console.log("Base sprite placeholders created.");
+
+            } catch (baseError) {
+                console.error("Error creating base sprites:", baseError);
+            }
+            // -------------------------------------------
 
             app!.ticker.add(gameLoop);
             tickerAdded = true;
@@ -542,10 +685,11 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         colyseusClient.current = null;
         // Reset refs
         carSprite.current = null;
+        itemSprite.current?.destroy(); // Destroy item sprite
+        itemSprite.current = null; // Clear ref
         otherPlayerSprites.current = {};
         inputState.current = { up: false, down: false, left: false, right: false };
-        // Clear the new state ref
-        allPlayersServerState.current = {}; // Clear object ref
+        allPlayersServerState.current = {};
         console.log("Cleanup finished.");
       };
   }, [connectToServer, gameLoop, handleKeyDown, handleKeyUp]); // Restore dependencies

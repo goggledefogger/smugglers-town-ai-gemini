@@ -14,13 +14,12 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Client converts server coordinates to GeoJSON, uses MapLibre projection for Pixi sprite placement, and handles initial synchronization on refresh.
 - Basic client-server structure with TypeScript on both ends.
 - Team assignment with persistence across refreshes (per browser tab).
-- Initial state definition for scores and generic pickup items (flags/toilets).
-- Collision-based pickup of items.
+- Initial state definition for scores and a single generic pickup item.
+- Server-side collision detection (player-item, player-player, player-base).
+- Core gameplay loop: Generic item pickup, player-vs-player item stealing, scoring by returning the item to team base.
 
 ### Planned / Future
-- Core game logic: Carrying items, scoring by returning items to team base.
 - Client-side prediction for improved input responsiveness.
-- Server-side collision detection (player-base, player-player).
 - Simple AI opponents.
 - Improved HUD with game state display (timer, etc.).
 - Refined visuals (Golden Toilet item, smoke effects) and sound effects.
@@ -125,3 +124,38 @@ Contributions are welcome! Please open an issue or submit a pull request. (Place
 ## License
 
 This project is licensed under the MIT License. (Placeholder - confirm if this is accurate).
+
+## Adding New Gameplay Elements (Development Notes)
+
+Adding new interactive elements (e.g., different pickups, obstacles, capture points) generally follows these steps:
+
+1.  **Define State (Schema):**
+    *   Add the necessary state properties for the new element to a `Schema` class (e.g., `ItemState`, `ObstacleState`) in `server/src/schemas/ArenaState.ts`.
+    *   Include properties like position (`x`, `y` in meters), status, owner/carrier ID, etc.
+    *   Add an instance of this new schema type to the main `ArenaState` class.
+    *   **(Temporary):** Duplicate these schema changes in `client/src/schemas/ArenaState.ts`.
+
+2.  **Implement Server Logic (`server/src/ArenaRoom.ts`):**
+    *   **Initialization (`onCreate`):** Set the initial state (position, status) for the new element(s).
+    *   **Update Loop (`update`):**
+        *   Add collision checks between players and the new element using the defined world coordinates (meters) and radii.
+        *   Implement the game logic that happens on collision (e.g., picking up, triggering an effect, modifying player state, modifying element state).
+        *   Handle any necessary state resets or position updates for the element (e.g., moving with a carrier, resetting after scoring).
+    *   **Lifecycle (`onLeave`):** Handle cases where a player carrying/interacting with the element leaves the game.
+
+3.  **Implement Client Rendering (`client/src/features/GameCanvas.tsx`):**
+    *   **Create Sprite Placeholder (`setupPixi` in `useEffect`):** Create a `PIXI.Graphics` or `PIXI.Sprite` object for the element, start it off-screen and invisible, and store it in a `useRef`.
+    *   **Get State:** Access the element's state directly from the `gameRoom.current.state` object within the `gameLoop`.
+    *   **Initial Placement (`gameLoop` - `!initialPlacementDone` block):**
+        *   On the first frame after connection, get the element's world position (`x`, `y`) from the state.
+        *   Convert meters to Geo (`worldToGeo`).
+        *   Project Geo to screen coordinates (`map.project`).
+        *   Set the sprite's `x`, `y`, and `visible` properties directly (no interpolation).
+    *   **Update Position/Visibility (`gameLoop` - regular update):**
+        *   Get the element's current world position and status from the state.
+        *   Convert/Project to get the target screen position.
+        *   Update the sprite's `x` and `y` using interpolation (`lerp`) towards the target screen position.
+        *   Set the sprite's `visible` property based on its status (e.g., hide if carried and rendered attached to player, show if at base/dropped).
+        *   If the element should visually attach to a player (like the current item), calculate its position relative to the carrier sprite's screen coordinates and rotation.
+
+4.  **Coordinate System Reminder:** The server operates purely in meters relative to the world origin (`ORIGIN_LNG`, `ORIGIN_LAT`). The client is responsible for converting these meter coordinates to Lng/Lat for MapLibre projection to get the correct screen coordinates for Pixi rendering.

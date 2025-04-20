@@ -11,11 +11,10 @@ export class Player extends Schema {
 
 // Schema for a single flag
 export class FlagState extends Schema {
-  @type("string") team: string = ""; // 'Red' or 'Blue' - which team this flag belongs to
-  @type("string") status: string = "atBase"; // "atBase", "carried", "dropped"
-  @type("number") x: number = 0; // Position in meters (when at base or dropped)
-  @type("number") y: number = 0;
-  @type("string") carrierId: string | null = null; // SessionId of player carrying it, or null
+  @type("string") status: "atBase" | "carried" | "dropped" = "atBase";
+  @type("number") x: number = NaN; // Meters (NaN when carried)
+  @type("number") y: number = NaN; // Meters (NaN when carried)
+  @type("string") carrierId: string | null = null; // Session ID of player carrying
 }
 
 export class ArenaState extends Schema {
@@ -25,9 +24,8 @@ export class ArenaState extends Schema {
   @type("number") redScore: number = 0;
   @type("number") blueScore: number = 0;
 
-  // Flags
-  @type(FlagState) redFlag = new FlagState();
-  @type(FlagState) blueFlag = new FlagState();
+  // Single generic item instead of two flags
+  @type(FlagState) item = new FlagState(); // Represents the single pickup item
 
   // Add more state later: bases, game timer, etc.
 }

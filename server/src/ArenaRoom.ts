@@ -7,6 +7,10 @@ const ACCEL_RATE_WORLD = 15; // Factor per second - Reduced for smooth lerp!
 const TURN_SMOOTH_WORLD = 12; // Factor per second
 const DRAG_FACTOR = 0.1; // Coefficient for linear drag (higher = more drag)
 
+// AI Movement Modifiers
+const AI_SPEED_MULTIPLIER = 0.9; // AI max speed is 90% of human
+const AI_ACCEL_MULTIPLIER = 0.85; // AI acceleration is 85% of human
+
 // Game Logic Constants
 const PICKUP_RADIUS = 30; // Meters (Increased)
 const PICKUP_RADIUS_SQ = PICKUP_RADIUS * PICKUP_RADIUS; // Use squared distance for efficiency
@@ -20,7 +24,7 @@ const SPAWN_RADIUS = 10; // Max distance from origin (0,0) for player spawn
 const BASE_DISTANCE = 150; // Meters from origin along X axis
 const Y_OFFSET = 5; // Small vertical offset from center line
 const ITEM_START_POS = { x: 0, y: 0 }; // Place item at the origin
-const STEAL_COOLDOWN_MS = 500; // Cooldown in milliseconds after a steal
+const STEAL_COOLDOWN_MS = 1500; // Cooldown in milliseconds after a steal (Increased from 500)
 const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET };
 const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET };
 
@@ -48,6 +52,8 @@ export class ArenaRoom extends Room<ArenaState> {
   private playerInputs = new Map<string, { dx: number, dy: number }>();
   // Store server-calculated velocity (not directly in synced state for now)
   private playerVelocities = new Map<string, { vx: number, vy: number }>();
+  // Store AI player session IDs
+  private aiPlayers = new Set<string>();
 
   // Maps for persistent identity and team tracking
   private persistentIdToSessionId = new Map<string, string>();
@@ -85,9 +91,10 @@ export class ArenaRoom extends Room<ArenaState> {
   // Called when a client joins the room
   onJoin (client: Client, options: any) {
     console.log(`[${client.sessionId}] Client joining... Options:`, options);
+    const isFirstPlayer = this.state.players.size === 0;
 
-    // --- Persistent ID (Tab ID) and Team Assignment ---
-    const tabId = options?.persistentPlayerId; // Renamed variable locally for clarity
+    // --- Persistent ID (Tab ID) and Team Assignment for HUMAN player ---
+    const tabId = options?.persistentPlayerId;
     let assignedTeam = "Red"; // Default team
     let isReturningPlayer = false;
     // Removed: let hadSessionConflict = false;
@@ -121,24 +128,42 @@ export class ArenaRoom extends Room<ArenaState> {
     }
     // -----------------------------------------
 
-    // Create Player instance
-    const player = new Player();
-    player.name = `Player ${client.sessionId.substring(0, 3)}`;
-    // Spawn player randomly within SPAWN_RADIUS of origin
+    // Create HUMAN Player instance
+    const humanPlayer = new Player();
+    humanPlayer.name = `Player ${client.sessionId.substring(0, 3)}`;
     const angle = Math.random() * Math.PI * 2;
     const radius = Math.random() * SPAWN_RADIUS;
-    player.x = Math.cos(angle) * radius;
-    player.y = Math.sin(angle) * radius;
-    player.heading = 0;
-    player.team = assignedTeam; // Use the determined team
-
-    console.log(`[${client.sessionId}] Final assigned team for player object: ${assignedTeam}`);
-
-    this.state.players.set(client.sessionId, player);
+    humanPlayer.x = Math.cos(angle) * radius;
+    humanPlayer.y = Math.sin(angle) * radius;
+    humanPlayer.heading = 0;
+    humanPlayer.team = assignedTeam; // Use the determined team for the human
+    console.log(`[${client.sessionId}] Final assigned team for HUMAN player object: ${assignedTeam}`);
+    this.state.players.set(client.sessionId, humanPlayer);
     this.playerInputs.set(client.sessionId, { dx: 0, dy: 0 });
     this.playerVelocities.set(client.sessionId, { vx: 0, vy: 0 });
+    console.log(`=> Player ${humanPlayer.name} (${humanPlayer.team}) added at (${humanPlayer.x.toFixed(1)}, ${humanPlayer.y.toFixed(1)}) meters. SessionId: ${client.sessionId}.`);
 
-    console.log(`=> Player ${player.name} (${player.team}) added at (${player.x.toFixed(1)}, ${player.y.toFixed(1)}) meters. SessionId: ${client.sessionId}.`);
+    // --- Spawn AI Opponent if this is the first player ---
+    if (isFirstPlayer) {
+        console.log("First human player joined, spawning AI opponent...");
+        const aiSessionId = "ai_1"; // Simple ID for now
+        const aiTeam = assignedTeam === "Red" ? "Blue" : "Red"; // Assign opposite team
+        const aiPlayer = new Player();
+        aiPlayer.name = "Bot (Easy)";
+        const aiAngle = Math.random() * Math.PI * 2;
+        const aiRadius = Math.random() * SPAWN_RADIUS;
+        aiPlayer.x = Math.cos(aiAngle) * aiRadius;
+        aiPlayer.y = Math.sin(aiAngle) * aiRadius;
+        aiPlayer.heading = 0;
+        aiPlayer.team = aiTeam;
+
+        this.state.players.set(aiSessionId, aiPlayer);
+        this.playerInputs.set(aiSessionId, { dx: 0, dy: 0 }); // Initialize AI input
+        this.playerVelocities.set(aiSessionId, { vx: 0, vy: 0 }); // Initialize AI velocity
+        this.aiPlayers.add(aiSessionId); // Track this as an AI player
+        console.log(`=> AI Player ${aiPlayer.name} (${aiPlayer.team}) added at (${aiPlayer.x.toFixed(1)}, ${aiPlayer.y.toFixed(1)}) meters. SessionId: ${aiSessionId}.`);
+    }
+    // ----------------------------------------------------
   }
 
   // Called when a client leaves the room
@@ -182,7 +207,7 @@ export class ArenaRoom extends Room<ArenaState> {
     }
     // ---------------------------
 
-    // Remove player state
+    // Remove human player state
     if (leavingPlayer) {
         console.log(`=> Player ${leavingPlayer.name} (${leavingPlayer.team}) removed state.`);
         this.state.players.delete(client.sessionId);
@@ -191,6 +216,36 @@ export class ArenaRoom extends Room<ArenaState> {
     } else {
         console.warn(`=> Player state for ${client.sessionId} already removed?`);
     }
+
+    // --- Check if last HUMAN player left, if so, remove AI ---
+    // Count remaining human players
+    let humanPlayerCount = 0;
+    this.state.players.forEach((player, sessionId) => {
+        if (!this.aiPlayers.has(sessionId)) { // Check if it's NOT an AI
+            humanPlayerCount++;
+        }
+    });
+
+    if (humanPlayerCount === 0 && this.aiPlayers.size > 0) {
+        console.log("Last human player left. Removing AI players...");
+        this.aiPlayers.forEach(aiSessionId => {
+             const aiPlayer = this.state.players.get(aiSessionId);
+             if (aiPlayer) {
+                console.log(`=> Removing AI ${aiPlayer.name} (${aiSessionId})`);
+                // Check if AI was carrying item
+                if (this.state.item.carrierId === aiSessionId) {
+                    console.log(`AI ${aiSessionId} was carrying item. Resetting item.`);
+                    this.resetItem();
+                }
+                // Remove AI state
+                this.state.players.delete(aiSessionId);
+                this.playerInputs.delete(aiSessionId);
+                this.playerVelocities.delete(aiSessionId);
+             }
+        });
+        this.aiPlayers.clear(); // Clear the AI tracking set
+    }
+    // ---------------------------------------------------------
   }
 
   // Helper to reset the item to its base
@@ -212,11 +267,127 @@ export class ArenaRoom extends Room<ArenaState> {
 
     const playerIds = Array.from(this.state.players.keys());
 
+    // --- Basic AI Input Simulation ---
+    this.aiPlayers.forEach(aiSessionId => {
+        const aiPlayer = this.state.players.get(aiSessionId);
+        let velocity = this.playerVelocities.get(aiSessionId); // Get AI's current velocity
+
+        if (!aiPlayer || !velocity) { // Ensure player and velocity map entry exist
+            console.warn(`AI player or velocity not found for ${aiSessionId} during update.`);
+            // If velocity missing, initialize it
+            if (aiPlayer && !velocity) {
+                velocity = { vx: 0, vy: 0 };
+                this.playerVelocities.set(aiSessionId, velocity);
+            } else {
+                 return; // Skip if player state is inconsistent
+            }
+        }
+
+        let targetX = 0;
+        let targetY = 0;
+        let targetFound = false;
+
+        // Decide target based on whether AI carries the item
+        if (this.state.item.carrierId === aiSessionId) {
+            // AI has the item, target its own base
+            targetX = aiPlayer.team === "Red" ? RED_BASE_POS.x : BLUE_BASE_POS.x;
+            targetY = aiPlayer.team === "Red" ? RED_BASE_POS.y : BLUE_BASE_POS.y;
+            targetFound = true;
+        } else if (this.state.item.carrierId === null || this.state.item.carrierId === undefined) {
+            // Item is available, target the item
+            targetX = this.state.item.x;
+            targetY = this.state.item.y;
+            targetFound = true;
+        } else {
+            // --- Item is carried by someone else: Target the opponent carrier ---
+            const carrierId = this.state.item.carrierId;
+            if (carrierId) { // Check if carrierId is actually set
+                const carrier = this.state.players.get(carrierId);
+                // Check if carrier exists AND is on the opposing team
+                if (carrier && carrier.team !== aiPlayer.team) {
+                    targetX = carrier.x;
+                    targetY = carrier.y;
+                    targetFound = true;
+                    // console.log(`[${aiSessionId}] AI targeting opponent carrier ${carrierId} at (${targetX.toFixed(1)}, ${targetY.toFixed(1)})`); // Optional debug log
+                } else {
+                    // Carrier is on the same team or doesn't exist, AI should idle
+                    targetFound = false;
+                    // console.log(`[${aiSessionId}] AI idling (carrier ${carrierId} is friendly or missing)`); // Optional debug log
+                }
+            } else {
+                 // Should not happen if status is 'carried', but handle defensively
+                 targetFound = false;
+                 console.warn(`[${aiSessionId}] Item status is 'carried' but carrierId is null/undefined?`);
+            }
+            // ---------------------------------------------------------------------
+        }
+
+        // Calculate desired velocity towards target
+        let targetVelX = 0;
+        let targetVelY = 0;
+        let targetWorldDirX = 0; // For heading calculation
+        let targetWorldDirY = 0; // For heading calculation
+
+        if (targetFound) {
+            const dirX = targetX - aiPlayer.x;
+            const dirY = targetY - aiPlayer.y;
+            const dist = Math.sqrt(dirX * dirX + dirY * dirY);
+
+            if (dist > 0.1) { // Add a small threshold to prevent jittering at the target
+                targetWorldDirX = dirX / dist; // Normalized direction
+                targetWorldDirY = dirY / dist;
+                // Apply AI speed modifier
+                targetVelX = targetWorldDirX * MAX_SPEED_WORLD * AI_SPEED_MULTIPLIER;
+                targetVelY = targetWorldDirY * MAX_SPEED_WORLD * AI_SPEED_MULTIPLIER;
+            } // else: Target velocity remains 0 if close enough
+        } // else: Target velocity remains 0 if no target (idle)
+
+        // Apply Drag (Always apply drag first)
+        const dragFactor = 1.0 - Math.min(DRAG_FACTOR * dt, 1.0);
+        velocity.vx *= dragFactor;
+        velocity.vy *= dragFactor;
+
+        // Apply Acceleration towards target velocity (Lerp)
+        // Apply AI acceleration modifier
+        const aiAccelRate = ACCEL_RATE_WORLD * AI_ACCEL_MULTIPLIER;
+        const accelFactor = Math.min(aiAccelRate * dt, 1.0);
+        velocity.vx = lerp(velocity.vx, targetVelX, accelFactor);
+        velocity.vy = lerp(velocity.vy, targetVelY, accelFactor);
+
+        // --- Update AI Position ---
+        if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
+            aiPlayer.x += velocity.vx * dt;
+            aiPlayer.y += velocity.vy * dt;
+        } else {
+            console.warn(`[${aiSessionId}] Invalid AI velocity (vx:${velocity.vx}, vy:${velocity.vy}), skipping position update.`);
+            velocity.vx = 0; velocity.vy = 0;
+        }
+
+        // --- Update AI Heading ---
+        let targetHeading = aiPlayer.heading;
+        // Use targetWorldDir calculated earlier for heading if moving
+        if (targetWorldDirX !== 0 || targetWorldDirY !== 0) {
+            targetHeading = Math.atan2(targetWorldDirY, targetWorldDirX);
+        } // else keep current heading if targetVel is 0
+
+        if (isFinite(targetHeading)) {
+            const turnFactor = Math.min(TURN_SMOOTH_WORLD * dt, 1.0);
+            aiPlayer.heading = angleLerp(aiPlayer.heading, targetHeading, turnFactor);
+        } else {
+            console.warn(`[${aiSessionId}] Invalid targetHeading (${targetHeading}) for AI ${aiSessionId}, skipping rotation update.`);
+        }
+
+    });
+    // -------------------------------
+
     // --- Update Player Movement and State ---
-    playerIds.forEach((sessionId, index) => {
+    // Filter out AI players before processing human inputs
+    const humanPlayerIds = playerIds.filter(id => !this.aiPlayers.has(id));
+
+    humanPlayerIds.forEach((sessionId, index) => { // Iterate only over human players now
         const player = this.state.players.get(sessionId)!; // Assume player exists
-        // --- Movement Logic --- (copied from previous, should be fine)
-        const retrievedInput = this.playerInputs.get(sessionId);
+        // --- Movement Logic --- (Only for HUMAN players)
+        const retrievedInput = this.playerInputs.get(sessionId); // Get HUMAN input
         const input = retrievedInput || { dx: 0, dy: 0 };
         let velocity = this.playerVelocities.get(sessionId);
         if (!velocity) {
@@ -295,6 +466,13 @@ export class ArenaRoom extends Room<ArenaState> {
 
              if (targetBasePos) {
                   const dSq = distSq(player.x, player.y, targetBasePos.x, targetBasePos.y);
+
+                  // --- DEBUG LOGGING FOR AI SCORING ---
+                  if (this.aiPlayers.has(sessionId)) {
+                      console.log(`[${sessionId} AI SCORE CHECK] Pos: (${player.x.toFixed(1)}, ${player.y.toFixed(1)}), TargetBase: (${targetBasePos.x.toFixed(1)}, ${targetBasePos.y.toFixed(1)}), DistSq: ${dSq.toFixed(1)}, RequiredSq: ${BASE_RADIUS_SQ.toFixed(1)}`);
+                  }
+                  // --- END DEBUG LOGGING ---
+
                   if (dSq <= BASE_RADIUS_SQ) {
                       console.log(`[${sessionId}] Player ${player.name} (${player.team}) SCORED with the item!`);
                       // Increment score
@@ -303,16 +481,62 @@ export class ArenaRoom extends Room<ArenaState> {
                       console.log(`Scores: Red ${this.state.redScore} - Blue ${this.state.blueScore}`);
                       // Reset the item
                       this.resetItem();
-                      // isCarryingItem = false; // No longer needed to modify here
                   }
              }
         }
         // --- End Collision Checks ---
 
-    }); // End player movement loop
+    }); // End HUMAN player movement loop
 
-    // --- Player-Player Collision / Stealing (Check all pairs AFTER movement) ---
-    const item = this.state.item;
+    // --- Item Pickup Check (Check all players AFTER movement) ---
+    const item = this.state.item; // Reference the single item
+    if (item.status === 'atBase' || item.status === 'dropped') {
+        playerIds.forEach(sessionId => {
+            const player = this.state.players.get(sessionId)!;
+            if (!player || item.carrierId) return; // Skip if player missing or item already carried
+
+            const dSq = distSq(player.x, player.y, item.x, item.y);
+            if (dSq <= PICKUP_RADIUS_SQ) {
+                console.log(`[${sessionId}] Player ${player.name} picked up the item!`);
+                item.status = "carried";
+                item.carrierId = sessionId;
+                item.x = NaN;
+                item.y = NaN;
+                // Since item is now carried, no other player can pick it up this tick
+                // We can potentially break/return early from the forEach if performance is critical
+                // but for simplicity, let it check all players just in case (though carrierId check prevents re-pickup)
+            }
+        });
+    }
+    // ------------------------------------------------------------
+
+    // --- Scoring Check (Check all players AFTER movement and pickup) ---
+    // const item = this.state.item; // Already defined above
+    playerIds.forEach(sessionId => {
+        const player = this.state.players.get(sessionId)!;
+        if (item.carrierId === sessionId) {
+            let targetBasePos = null;
+
+            // Player scores by bringing the item to THEIR base
+            if (player.team === 'Red') { targetBasePos = RED_BASE_POS; }
+            else if (player.team === 'Blue') { targetBasePos = BLUE_BASE_POS; }
+
+            if (targetBasePos) {
+                const dSq = distSq(player.x, player.y, targetBasePos.x, targetBasePos.y);
+                if (dSq <= BASE_RADIUS_SQ) {
+                    console.log(`[${sessionId}] Player ${player.name} (${player.team}) SCORED with the item!`);
+                    // Increment score
+                    if (player.team === 'Red') this.state.redScore++;
+                    else this.state.blueScore++;
+                    console.log(`Scores: Red ${this.state.redScore} - Blue ${this.state.blueScore}`);
+                    // Reset the item
+                    this.resetItem();
+                }
+            }
+        }
+    }); // End scoring loop
+
+    // --- Player-Player Collision / Stealing (Check all pairs AFTER scoring) ---
     const currentTime = this.clock.currentTime; // Get current server time
 
     // Check if item is carried AND cooldown has expired

@@ -26,11 +26,12 @@ Core gameplay loop and networking implementation for the Real-World Map CTF Race
 
 ## In Progress Tasks
 
-- [ ] Refine server-side movement physics (acceleration, friction, turning)
-- [ ] Address schema duplication (create shared package or use monorepo tools)
+- [x] Implement correct team assignment and client-side color display
+- [x] Refine server-side movement physics (acceleration, friction, turning) - Added basic drag
 
 ## Future Tasks
 
+- [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 - [ ] Implement server-side collision detection (player-player, player-object)
 - [ ] Add game state elements (pickups, bases, flags, scores, timers) to `ArenaState`
@@ -43,6 +44,7 @@ Core gameplay loop and networking implementation for the Real-World Map CTF Race
 - [ ] Database integration (player accounts, stats persistence - if needed)
 - [ ] Deployment configuration (client and server)
 - [ ] Address `npm audit` vulnerabilities
+- [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 
 ## Implementation Plan
 

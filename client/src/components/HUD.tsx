@@ -2,9 +2,11 @@ import React from 'react';
 
 interface HUDProps {
   // Props for scores, timer, etc. will be added later
+  redScore: number;
+  blueScore: number;
 }
 
-const HUD: React.FC<HUDProps> = () => {
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     position: 'absolute',
@@ -39,12 +41,12 @@ const HUD: React.FC<HUDProps> = () => {
 
   return (
     <div style={hudStyle}>
-      {/* Placeholder Scores */}
-      <div style={blueScoreStyle}>0</div>
+      {/* Display Scores */}
+      <div style={blueScoreStyle}>{blueScore}</div>
       {/* Placeholder Timer */}
       <div style={timerStyle}>5:00</div>
-      {/* Placeholder Scores */}
-      <div style={redScoreStyle}>0</div>
+      {/* Display Scores */}
+      <div style={redScoreStyle}>{redScore}</div>
     </div>
   );
 };

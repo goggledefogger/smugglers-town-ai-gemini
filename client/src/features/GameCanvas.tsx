@@ -3,8 +3,9 @@ import maplibregl, { Map, LngLat, Point } from 'maplibre-gl';
 import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Client, Room } from 'colyseus.js'; // Re-enabled
+import { v4 as uuidv4 } from 'uuid'; // Import uuid
 import HUD from '../components/HUD'; // Re-enabled
-import { ArenaState, Player } from '../schemas/ArenaState'; // Re-enabled
+import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Re-enabled
 
 // Map and Style
 // Read style URL from environment variable
@@ -30,9 +31,17 @@ const TURN_SMOOTH = 12;
 
 // Client-side visual tuning
 const INTERPOLATION_FACTOR = 0.3; // Keep the factor from before
+const CAR_WIDTH = 20;
+const CAR_HEIGHT = 40;
 
 // Colyseus Endpoint
 const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
+
+// Session Storage Key (Changed from Local Storage)
+const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId';
+
+// Default initial state for flags (adjust if needed)
+const initialFlagState = (): FlagState => new FlagState();
 
 // --- Helper Functions ---
 function lerp(start: number, end: number, factor: number): number {
@@ -83,6 +92,19 @@ function worldToGeo(x_meters: number, y_meters: number): [number, number] { // [
     return [resultLng, resultLat];
 }
 
+// Helper to draw the car sprite
+function drawCar(graphics: PIXI.Graphics, team: string) {
+    graphics.clear(); // Clear previous drawing
+    const color = team === 'Red' ? 0xff0000 : 0x0000ff; // Red or Blue
+    const outlineColor = 0xffffff;
+
+    graphics
+        .rect(0, 0, CAR_WIDTH, CAR_HEIGHT).fill({ color: color })
+        .poly([CAR_WIDTH / 2, -5, CAR_WIDTH, 10, 0, 10]).fill({ color: outlineColor }); // White arrow
+    // Ensure pivot is set (might be redundant if set once at creation, but safe)
+    graphics.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
+}
+
 // --- Component ---
 interface GameCanvasProps {}
 interface InputState { up: boolean; down: boolean; left: boolean; right: boolean; }
@@ -103,6 +125,15 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const mapTargetCenter = useRef<LngLat | null>(null);
   const colyseusClient = useRef<Client | null>(null);
   const gameRoom = useRef<ArenaRoomType | null>(null);
+  // Add refs for flag sprites
+  const redFlagSprite = useRef<PIXI.Graphics | null>(null);
+  const blueFlagSprite = useRef<PIXI.Graphics | null>(null);
+
+  // --- State ---
+  const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
+  // Add state for flags
+  const [redFlagState, setRedFlagState] = useState<FlagState>(initialFlagState);
+  const [blueFlagState, setBlueFlagState] = useState<FlagState>(initialFlagState);
 
   // Debug refs for local-only panning test
   const debugLocalX = useRef<number>(0);
@@ -134,22 +165,15 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         }
     }
 
-    // --- Sprite Interpolation (Projecting Target Here) ---
+    // --- Sprite Interpolation / Updates ---
     if (pixiApp.current && mapInstance.current) {
         const currentMap = mapInstance.current;
 
-        // Log keys once per frame before loop if needed
-        // console.log("Other Sprites Keys:", Object.keys(otherPlayerSprites.current));
-
-        // Iterate using Object.keys
+        // --- Update Player Sprites ---
         Object.keys(allPlayersServerState.current).forEach((sessionId: string) => {
             const playerState = allPlayersServerState.current[sessionId];
             const isLocalPlayer = sessionId === gameRoom.current?.sessionId;
             const sprite = isLocalPlayer ? carSprite.current : otherPlayerSprites.current[sessionId];
-
-            // *** DEBUG LOGGING START ***
-            // console.log(`[GameLoop] Processing SID: ${sessionId}, Local?: ${isLocalPlayer}, Room SID: ${gameRoom.current?.sessionId}, Sprite Found?: ${!!sprite}, OtherSpriteKeys: ${JSON.stringify(Object.keys(otherPlayerSprites.current))}`);
-            // *** DEBUG LOGGING END ***
 
             if (!sprite) {
                 if (!isLocalPlayer) console.warn(`[GameLoop] Sprite missing for remote player: ${sessionId}`);
@@ -170,6 +194,12 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                     // Keep target rotation calculation as is
                     const targetRotation = -playerState.heading + Math.PI / 2;
 
+                    // Ensure car is drawn with correct team color (especially for local player)
+                    if (isLocalPlayer) {
+                        // Log the team value being used for drawing
+                        drawCar(sprite, playerState.team);
+                    }
+
                     // Interpolate Sprite towards target
                     sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
                     sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
@@ -184,6 +214,42 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 sprite.visible = false;
             }
         });
+
+        // --- Update Flag Sprites ---
+        const flagsToUpdate: { state: FlagState; sprite: PIXI.Graphics | null }[] = [
+            { state: redFlagState, sprite: redFlagSprite.current },
+            { state: blueFlagState, sprite: blueFlagSprite.current },
+        ];
+
+        flagsToUpdate.forEach(({ state, sprite }) => {
+            if (!sprite) return;
+
+            // Only show flag sprite if it's at base or dropped
+            const shouldBeVisible = state.status === 'atBase' || state.status === 'dropped';
+
+            if (shouldBeVisible && isFinite(state.x) && isFinite(state.y)) {
+                try {
+                    const [targetLng, targetLat] = worldToGeo(state.x, state.y);
+                    const targetScreenPos = currentMap.project([targetLng, targetLat]);
+
+                    if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
+                        throw new Error(`Invalid projected screen pos for flag ${state.team}`);
+                    }
+
+                    // Position flag directly (no interpolation for now)
+                    sprite.x = targetScreenPos.x;
+                    sprite.y = targetScreenPos.y;
+                    sprite.visible = true;
+                } catch (e) {
+                    console.warn(`Error updating flag sprite ${state.team}:`, e);
+                    sprite.visible = false;
+                }
+            } else {
+                // Hide if carried, status is invalid, or position is invalid
+                sprite.visible = false;
+            }
+        });
+        // -------------------------
     }
   }, []);
 
@@ -208,12 +274,26 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   // Colyseus Connection Logic (Restore)
   const connectToServer = useCallback(async () => {
     if (gameRoom.current || !isMounted.current) return;
+
+    // --- Get/Set Session Tab ID ---
+    let tabId = sessionStorage.getItem(SESSION_TAB_ID_KEY);
+    if (!tabId) {
+        tabId = uuidv4();
+        sessionStorage.setItem(SESSION_TAB_ID_KEY, tabId);
+        console.log(`Generated new sessionTabId: ${tabId}`);
+    } else {
+        console.log(`Using existing sessionTabId: ${tabId}`);
+    }
+    // -----------------------------------
+
     console.log(`Attempting to connect to Colyseus server at ${COLYSEUS_ENDPOINT}...`);
     colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
     try {
-        const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', {});
+        // Pass tabId in joinOptions (using the same key name for server compatibility)
+        const joinOptions = { persistentPlayerId: tabId }; // Server expects 'persistentPlayerId'
+        const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', joinOptions);
         gameRoom.current = room;
-        console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}`);
+        console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}, TabId: ${tabId}`);
 
         room.onStateChange((state: ArenaState) => {
             if (!mapInstance.current || !pixiApp.current || !isMounted.current) return;
@@ -224,12 +304,17 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             // Update state for current players
             state.players.forEach((player, sessionId) => {
                 incomingPlayerIds.add(sessionId);
-                // Store the actual Player instance
                 newState[sessionId] = player;
             });
-
-            // Update the ref object
             allPlayersServerState.current = newState;
+
+            // Update scores state
+            setScores({ red: state.redScore, blue: state.blueScore });
+
+            // --- Update Flag State ---
+            if (state.redFlag) setRedFlagState(state.redFlag);
+            if (state.blueFlag) setBlueFlagState(state.blueFlag);
+            // -----------------------
 
             // Update Map Target Center based on local player
             const localPlayerState = allPlayersServerState.current[room.sessionId];
@@ -256,12 +341,17 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                     // Although it should if the key is in incomingPlayerIds
                     console.log(`Creating sprite for player ${sessionId}`);
                     const otherCarWidth = 20; const otherCarHeight = 40;
-                    // --- Create Blue Sprite ---
-                    sprite = new PIXI.Graphics()
-                        .rect(0, 0, otherCarWidth, otherCarHeight).fill({ color: 0x0000ff }) // Blue rectangle
-                        .poly([ otherCarWidth / 2, -5, otherCarWidth, 10, 0, 10]).fill({ color: 0xffffff }); // White arrow
-                    // --- End Create Blue Sprite ---
-                    sprite.pivot.set(otherCarWidth / 2, otherCarHeight / 2);
+                    // --- Create Sprite based on Team Color ---
+                    sprite = new PIXI.Graphics(); // Create empty graphics first
+                    sprite.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
+                    const playerState = allPlayersServerState.current[sessionId]; // Get state to determine team
+                    if (playerState) {
+                         drawCar(sprite, playerState.team); // Draw correct color
+                    } else {
+                         drawCar(sprite, 'Blue'); // Fallback color if state somehow missing
+                         console.warn(`State missing for player ${sessionId} during sprite creation, defaulting color.`);
+                    }
+                    // --- End Create Sprite ---
                     sprite.x = -1000; sprite.y = -1000; sprite.visible = false;
                     pixiApp.current.stage.addChild(sprite);
                     otherPlayerSprites.current[sessionId] = sprite;
@@ -330,17 +420,37 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             console.log("Pixi init ok.");
             currentPixiContainer.appendChild(app!.canvas);
 
-            // Restore car sprite creation
+            // Create placeholder car sprite (will be colored later by onStateChange)
             console.log("Setting up Pixi stage...");
-            const carWidth = 20; const carHeight = 40;
-            const carGfx = new PIXI.Graphics() // Red
-                .rect(0, 0, carWidth, carHeight).fill({ color: 0xff0000 })
-                .poly([ carWidth / 2, -5, carWidth, 10, 0, 10]).fill({ color: 0xffffff });
-            carGfx.pivot.set(carWidth / 2, carHeight / 2);
-            carGfx.x = -1000; carGfx.y = -1000; // Start off-screen
+            // --- Player Sprite Placeholder ---
+            const carGfx = new PIXI.Graphics();
+            carGfx.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
+            carGfx.x = -1000; carGfx.y = -1000;
+            carGfx.visible = false;
             app!.stage.addChild(carGfx);
             carSprite.current = carGfx;
-            console.log("Car sprite added.");
+            console.log("Car sprite placeholder added.");
+
+            // --- Flag Sprite Placeholders ---
+            const flagSize = 15;
+            // Red Flag (Diamond Shape)
+            const redFlagGfx = new PIXI.Graphics()
+                .poly([0, -flagSize, flagSize, 0, 0, flagSize, -flagSize, 0]).fill(0xff0000) // Red diamond
+                .stroke({ width: 1, color: 0xffffff }); // White outline
+            redFlagGfx.pivot.set(0, 0); // Pivot at center
+            redFlagGfx.x = -1000; redFlagGfx.y = -1000; redFlagGfx.visible = false;
+            app!.stage.addChild(redFlagGfx);
+            redFlagSprite.current = redFlagGfx;
+            // Blue Flag (Diamond Shape)
+            const blueFlagGfx = new PIXI.Graphics()
+                .poly([0, -flagSize, flagSize, 0, 0, flagSize, -flagSize, 0]).fill(0x0000ff) // Blue diamond
+                .stroke({ width: 1, color: 0xffffff }); // White outline
+            blueFlagGfx.pivot.set(0, 0);
+            blueFlagGfx.x = -1000; blueFlagGfx.y = -1000; blueFlagGfx.visible = false;
+            app!.stage.addChild(blueFlagGfx);
+            blueFlagSprite.current = blueFlagGfx;
+            console.log("Flag sprite placeholders added.");
+            // -------------------------------
 
             app!.ticker.add(gameLoop);
             tickerAdded = true;
@@ -411,7 +521,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       <div ref={pixiContainer} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         {/* Pixi canvas will be appended here */}
       </div>
-      <HUD /> {/* Re-enabled */}
+      <HUD redScore={scores.red} blueScore={scores.blue} /> {/* Pass scores to HUD */}
     </div>
   );
 };

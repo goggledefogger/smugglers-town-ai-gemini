@@ -30,6 +30,9 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implement server-side collision detection (player-item, player-player, player-base)
 - [x] Implement core game logic (single generic item pickup, player-player item stealing, scoring at own base)
 - [x] Add simple AI opponents (server-side) (Basic targeting & movement)
+- [x] Refactor server room logic into separate modules (constants, helpers, controllers, rules)
+- [x] Implement manual AI spawning via client message (`add_ai`)
+- [x] Add basic UI buttons for triggering AI spawn
 
 ## In Progress Tasks
 
@@ -56,8 +59,15 @@ The game uses a server-authoritative architecture with client-side interpolation
 
 ### Relevant Files
 
-- ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
-- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop, and implementing core game rules (collisions, pickup, stealing, scoring, **AI control**).
+- ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates, **and rendering UI components (HUD, AIControls)**. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
+- ✅ `client/src/components/HUD.tsx`: Displays game scores.
+- ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players.
+- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules).
+- ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
+- ✅ `server/src/game/playerController.ts`: Handles human player movement logic.
+- ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing).
+- ✅ `server/src/config/constants.ts`: Defines game constants.
+- ✅ `server/src/utils/helpers.ts`: Contains utility functions (lerp, distSq, etc.).
 - ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `FlagState`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`. Includes a single generic item.
 - ⚠️ `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client. Needs refactoring to match server (single item).
 - ✅ `server/src/index.ts`: Entry point for the Colyseus server setup.

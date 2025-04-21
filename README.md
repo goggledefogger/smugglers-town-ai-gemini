@@ -118,6 +118,28 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 └── TASKS.md          # Development task tracking
 ```
 
+## Client Rendering & UI Layering
+
+The client uses three distinct layers for rendering visuals:
+
+1.  **Base Map Layer (MapLibre GL JS):**
+    *   **Purpose:** Displays the underlying real-world map (roads, buildings, water, terrain).
+    *   **Coordinates:** Geographic (Latitude, Longitude).
+    *   **Updates:** Handles map tile loading, rendering, panning, and zooming.
+
+2.  **Game Object Overlay Layer (PixiJS):**
+    *   **Purpose:** Renders dynamic game entities positioned *within the game world* (players, items, bases, visual zones).
+    *   **Technology:** PixiJS canvas overlaying the map.
+    *   **Coordinates:** Server uses Meters (relative to a world origin). Client converts Meters -> Lat/Lng -> Screen Pixels in the `gameLoop` using `worldToGeo` and `map.project()` for precise positioning on the map.
+    *   **Updates:** Redrawn every frame in the `gameLoop` for smooth, map-synchronized movement and placement.
+    *   **Important:** To correctly position a PixiJS object (like a Sprite or Graphics) on the map, you *must* perform the Meter -> Lat/Lng -> Screen Pixel conversion within the `gameLoop` and apply the resulting **screen pixel coordinates** to the object's `x` and `y` properties (for sprites/positioned objects) or use them directly in drawing commands like `moveTo/lineTo` (for graphics). This ensures the object stays aligned with the map as it pans and zooms.
+
+3.  **HUD/Static UI Layer (React/HTML/CSS):**
+    *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, buttons, status messages).
+    *   **Technology:** Standard React components, HTML, CSS.
+    *   **Coordinates:** Standard CSS positioning (relative to the viewport/container).
+    *   **Updates:** Driven by React state changes based on server data or user input.
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request. (Placeholder - specific guidelines can be added later).

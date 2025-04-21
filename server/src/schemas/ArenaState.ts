@@ -6,6 +6,7 @@ export class Player extends Schema {
   @type("number") y: number = 0; // Meters relative to origin (+Y = North)
   @type("number") heading: number = 0; // Radians (0 = East)
   @type("string") team: "Red" | "Blue" | "none" = "none"; // Use literal types
+  @type("boolean") justReset: boolean = false; // Flag for water reset notification
   // Add other player-specific state later (e.g., score, hasPickup)
 }
 

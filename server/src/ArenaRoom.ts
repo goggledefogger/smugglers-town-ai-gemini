@@ -41,6 +41,7 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.redScore = 0;
     this.state.blueScore = 0;
     resetItemState(this.state.item); // Use helper to init item
+
     console.log(`Initialized item at (${this.state.item.x}, ${this.state.item.y})`);
 
     // Register message handlers
@@ -142,6 +143,21 @@ export class ArenaRoom extends Room<ArenaState> {
     checkScoring(this.state, playerIds); // Check scoring before stealing
     checkStealing(this.state, playerIds, this.clock.currentTime);
     updateCarriedItemPosition(this.state);
+
+    // 4. Send Reset Notifications and Clear Flags
+    playerIds.forEach(sessionId => {
+        if (this.aiPlayers.has(sessionId)) return; // Skip AI
+
+        const player = this.state.players.get(sessionId);
+        if (player && player.justReset) {
+            const client = this.clients.find(c => c.sessionId === sessionId);
+            if (client) {
+                client.send("water_reset");
+                console.log(`Sent water_reset notification to ${player.name} (${sessionId})`);
+            }
+            player.justReset = false; // Reset the flag in the state
+        }
+    });
   }
 
   // --- Message Handlers ---

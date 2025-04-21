@@ -4,11 +4,10 @@ import * as PIXI from 'pixi.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Client, Room } from 'colyseus.js'; // Re-enabled
 import { v4 as uuidv4 } from 'uuid'; // Import uuid
-import HUD from '../components/HUD'; // Corrected import style for default export
-import AIControls from '../components/AIControls'; // Import the new component
-import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Re-enabled
+import HUD from '../components/HUD'; // <-- Use default import
+import AIControls from '../components/AIControls'; // <-- Use default import
+import { Player, ArenaState, FlagState } from "../schemas/ArenaState"; // <-- Remove ZoneState import
 import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, ORIGIN_LNG } from '../utils/coordinateUtils'; // Corrected path to assumed utils dir
-import { SessionStorageKeys } from './constants'; // Removed broken import
 
 // Map and Style
 // Read style URL from environment variable
@@ -141,6 +140,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
+  const [showResetMessage, setShowResetMessage] = useState(false); // <-- Add state for reset message
 
   // Debug refs for local-only panning test
   const debugLocalX = useRef<number>(0);
@@ -451,6 +451,16 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         gameRoom.current = room;
         console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}, TabId: ${tabId}`);
 
+        // --- Listen for Water Reset Message ---
+        room.onMessage("water_reset", () => {
+            console.log("[Client] Received water_reset message!");
+            setShowResetMessage(true);
+            setTimeout(() => {
+                setShowResetMessage(false);
+            }, 3000); // Show message for 3 seconds
+        });
+        // -------------------------------------
+
         // --- Add flag to track if first state change received ---
         let firstStateReceived = false;
 
@@ -667,6 +677,46 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       map.on('load', () => {
           if (!isMounted.current) return;
           console.log('Map loaded.');
+
+          // --- Add Water Zone Layer via GeoJSON ---
+          try {
+              const waterZoneGeoJsonCoords = [
+                  [-73.99219, 40.75620], // Bottom Left (Lng, Lat)
+                  [-73.99100, 40.75620], // Bottom Right
+                  [-73.99100, 40.75979], // Top Right
+                  [-73.99219, 40.75979], // Top Left
+                  [-73.99219, 40.75620]  // Close loop
+              ];
+
+              map.addSource('water-zone-source', {
+                  'type': 'geojson',
+                  'data': {
+                      'type': 'Feature',
+                      'geometry': {
+                          'type': 'Polygon',
+                          'coordinates': [waterZoneGeoJsonCoords] // GeoJSON Polygon requires nested array
+                      },
+                      'properties': {}
+                  }
+              });
+
+              map.addLayer({
+                  'id': 'water-zone-layer',
+                  'type': 'fill',
+                  'source': 'water-zone-source',
+                  'layout': {},
+                  'paint': {
+                      'fill-color': '#0000FF', // Blue
+                      'fill-opacity': 0.3,
+                      // 'fill-outline-color': '#0000AA' // Optional outline
+                  }
+              });
+              console.log('Water zone GeoJSON layer added to map.');
+          } catch (mapLayerError) {
+              console.error("Error adding water zone layer to map:", mapLayerError);
+          }
+          // --- End Water Zone Layer ---
+
           setupPixi().then(() => {
               if (!isMounted.current || !pixiInitComplete.current) return;
               console.log('Pixi setup complete.');
@@ -744,7 +794,23 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       <HUD redScore={scores.red} blueScore={scores.blue} /> {/* HUD positioned by its own styles */}
       <AIControls onAddAi={handleAddAi} /> {/* Use the new component */}
 
-      {/* Debug Overlay could also go here with appropriate z-index and positioning */}
+      {/* Water Reset Message */} 
+      {showResetMessage && (
+        <div style={{
+          position: 'absolute',
+          top: '20%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '10px 20px',
+          backgroundColor: 'rgba(255, 0, 0, 0.7)',
+          color: 'white',
+          borderRadius: '5px',
+          zIndex: 1000, // Ensure it's above map/pixi
+          pointerEvents: 'none' // Prevent interaction
+        }}>
+          SPLASH! You hit the water!
+        </div>
+      )}
     </div>
   );
 };

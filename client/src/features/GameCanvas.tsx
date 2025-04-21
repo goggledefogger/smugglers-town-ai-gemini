@@ -110,6 +110,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
   const [gameTimeRemaining, setGameTimeRemaining] = useState<number | undefined>(undefined);
   const [showResetMessage, setShowResetMessage] = useState(false); // <-- Add state for reset message
+  const [localPlayerTeam, setLocalPlayerTeam] = useState<'Red' | 'Blue' | undefined>(undefined);
+  const [itemStatusString, setItemStatusString] = useState<string | undefined>(undefined);
 
   // Debug refs for local-only panning test
   const debugLocalX = useRef<number>(0);
@@ -479,6 +481,41 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         // --- End Navigation Arrow Update ---
 
     } // End of if (pixiApp.current && mapInstance.current)
+
+    // --- Update Local State for HUD ---
+    if (gameRoom.current?.state && gameRoom.current?.sessionId) {
+        const state = gameRoom.current.state;
+        const localSessionId = gameRoom.current.sessionId;
+        const player = state.players.get(localSessionId);
+
+        // Update player team
+        const team = player?.team;
+        setLocalPlayerTeam(team === 'Red' || team === 'Blue' ? team : undefined);
+
+        // Update item status string (NOTE: Will need refactoring for multiple items)
+        const item = state.item;
+        let statusStr = "Item: Unknown";
+        if (item) {
+            switch (item.status) {
+                case 'atBase':
+                    // Differentiate between initial spawn and actual base
+                    if (item.x === 0 && item.y === 0) {
+                        statusStr = "Item: Available";
+                    } else {
+                        statusStr = `Item: At ${item.x < 0 ? 'Red' : 'Blue'} Base`;
+                    }
+                    break;
+                case 'dropped': statusStr = "Item: Dropped"; break;
+                case 'carried':
+                    const carrier = state.players.get(item.carrierId!);
+                    statusStr = `Item: Carried by ${carrier?.team ?? 'Unknown'}`;
+                    break;
+                default: statusStr = "Item: Status Unknown"; break;
+            }
+        }
+        setItemStatusString(statusStr);
+    }
+    // --- End Update Local State for HUD ---
 
   }, []); // End of gameLoop useCallback
 
@@ -956,6 +993,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         redScore={scores.red}
         blueScore={scores.blue}
         gameTimeRemaining={gameTimeRemaining}
+        localPlayerTeam={localPlayerTeam}
+        itemStatusString={itemStatusString}
       /> {/* HUD positioned by its own styles */}
       <AIControls onAddAi={handleAddAi} /> {/* Use the new component */}
 

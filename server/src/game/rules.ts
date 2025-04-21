@@ -85,14 +85,6 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
         // Check distance from player's FRONT to base center
         const dSq = distSq(frontX, frontY, targetBasePos.x, targetBasePos.y);
 
-        // --- DEBUG LOGGING ---
-        console.log(`[ScoreCheck] Player: ${item.carrierId}, Team: ${carrier.team}`);
-        console.log(`  Center: (${carrier.x.toFixed(2)}, ${carrier.y.toFixed(2)}), Heading: ${angle.toFixed(2)}`);
-        console.log(`  Front: (${frontX.toFixed(2)}, ${frontY.toFixed(2)})`);
-        console.log(`  Base: (${targetBasePos.x.toFixed(2)}, ${targetBasePos.y.toFixed(2)})`);
-        console.log(`  DistSq: ${dSq.toFixed(2)}, BaseRadiusSq: ${BASE_RADIUS_SQ}`);
-        // --- END DEBUG LOGGING ---
-
         if (dSq <= BASE_RADIUS_SQ) {
             console.log(`[${item.carrierId}] Player ${carrier.name} (${carrier.team}) SCORED with the item! (Front check)`);
             // Increment score
@@ -108,46 +100,79 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
 }
 
 /**
+ * Data structure for returning debug info from checkStealing
+ */
+interface StealCheckDebugData {
+    carrierId: string;
+    carrierX: number;
+    carrierY: number;
+    stealerId: string;
+    stealerX: number;
+    stealerY: number;
+}
+
+/**
  * Checks for item stealing between opposing players.
  * Modifies the item state if a steal occurs.
+ * @returns StealCheckDebugData | null - Returns position data if a distance check was performed, null otherwise.
  */
 export function checkStealing(
     state: ArenaState,
     playerIds: string[],
     currentTime: number
-): void {
+): StealCheckDebugData | null {
     const item = state.item;
 
     // Check if item is carried AND cooldown has expired
     if (item.status !== 'carried' || !item.carrierId || currentTime < item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
-        return;
+        return null;
     }
 
     const carrier = state.players.get(item.carrierId);
     if (!carrier) {
         console.warn(`Stealing check: Carrier ${item.carrierId} not found, resetting item.`);
         resetItemState(item);
-        return;
+        return null;
     }
+
+    let debugData: StealCheckDebugData | null = null;
 
     for (const potentialStealerId of playerIds) {
         if (potentialStealerId === item.carrierId) continue; // Cannot steal from self
 
         const potentialStealer = state.players.get(potentialStealerId);
+
         if (!potentialStealer || potentialStealer.team === carrier.team) {
             continue; // Skip if player doesn't exist or is on the same team
         }
 
-        // Check distance
+        // New check: Use a slightly larger fixed threshold for now
+        const collisionThresholdSq = 5 * 5; // Target distance of 5 meters (squared)
+
+        // --- Prepare Debug Data --- Capture positions used for this check
+        // We capture it here *before* the distance check, as this is the data we want to visualize
+        debugData = {
+            carrierId: item.carrierId,
+            carrierX: carrier.x,
+            carrierY: carrier.y,
+            stealerId: potentialStealerId,
+            stealerX: potentialStealer.x,
+            stealerY: potentialStealer.y
+        };
+        // --------------------------
+
         const dSq = distSq(carrier.x, carrier.y, potentialStealer.x, potentialStealer.y);
-        if (dSq <= PLAYER_COLLISION_RADIUS_SQ) {
+
+        if (dSq <= collisionThresholdSq) {
             // Steal occurred!
             console.log(`[${potentialStealerId}] Player ${potentialStealer.name} (${potentialStealer.team}) STOLE item from [${item.carrierId}] Player ${carrier.name} (${carrier.team})!`);
             item.carrierId = potentialStealerId;
             item.lastStealTimestamp = currentTime; // Set timestamp
-            return; // Only one steal per tick
+            return debugData;
         }
     }
+    // If loop completes without steal, return the debug data from the last check performed (or null if loop didn't run)
+    return debugData;
 }
 
 /**

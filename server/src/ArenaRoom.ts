@@ -152,9 +152,6 @@ export class ArenaRoom extends Room<ArenaState> {
                     .then(apiResponse => {
                         if (apiResponse) {
                             const foundRoad = responseHasRoad(apiResponse);
-                            if (foundRoad !== cachedStatus.isOnRoad) { // Log only if status changes
-                                console.log(`[${player.name}] Road status CHANGED -> ${foundRoad}`);
-                            }
                             // Update cache with the actual result
                             this.playerRoadStatusCache.set(sessionId, { isOnRoad: foundRoad, lastQueryTime: now });
                         } // No else needed, retain old status on API error
@@ -225,7 +222,14 @@ export class ArenaRoom extends Room<ArenaState> {
     // 3. Apply Game Rules (after all players have moved)
     checkItemPickup(this.state, playerIds);
     checkScoring(this.state, playerIds); // Check scoring before stealing
-    checkStealing(this.state, playerIds, this.clock.currentTime);
+
+    // Check stealing and get potential debug data
+    const stealDebugData = checkStealing(this.state, playerIds, this.clock.currentTime);
+    if (stealDebugData) {
+        // Broadcast the positions used in the check to all clients for visualization
+        this.broadcast("debug_steal_check_positions", stealDebugData, { afterNextPatch: true });
+    }
+
     updateCarriedItemPosition(this.state);
 
     // 4. Send Reset Notifications and Clear Flags

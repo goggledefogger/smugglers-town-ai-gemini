@@ -146,6 +146,11 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   // Refs for static base sprites
   const redBaseSprite = useRef<PIXI.Graphics | null>(null);
   const blueBaseSprite = useRef<PIXI.Graphics | null>(null);
+  // --- Debug Refs ---
+  const debugCarrierSprite = useRef<PIXI.Graphics | null>(null);
+  const debugStealerSprite = useRef<PIXI.Graphics | null>(null);
+  const debugMarkerTimeout = useRef<NodeJS.Timeout | null>(null);
+  // ------------------
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
@@ -184,27 +189,17 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
     // --- Initial Placement on First Frame with State ---
     if (!initialPlacementDone.current) {
-        console.log("GameLoop: Performing initial placement...");
         // Ensure gameRoom is available here
         if (!gameRoom.current || !gameRoom.current.sessionId) {
-            console.log("  [Initial Placement] Skipping: Game room or session ID not ready.");
             return;
         }
 
         const localSessionId = gameRoom.current.sessionId;
         const localPlayerState = allPlayersServerState.current[localSessionId];
 
-        // --- Add Logging ---
-        console.log(`  [Initial Placement] Checking state for local player: ${localSessionId}`);
-        console.log(`  [Initial Placement] allPlayersServerState:`, JSON.stringify(allPlayersServerState.current)); // Log the whole state map
-        console.log(`  [Initial Placement] localPlayerState found:`, localPlayerState); // Log the specific player state found
-        // ---------------------
-
         if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
-            console.log(`  [Initial Placement] Local state valid: Pos (${localPlayerState.x.toFixed(1)}, ${localPlayerState.y.toFixed(1)})`); // Log valid state info
             try {
                 const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
-                console.log(`  [Initial Placement] worldToGeo result: (${targetLng}, ${targetLat})`); // Log worldToGeo output
                 if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat from worldToGeo for initial center");
 
                 // Define currentMap, currentStage, currentScreen here
@@ -214,7 +209,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
                 // Force Map Center
                 currentMap.setCenter([targetLng, targetLat]);
-                console.log(`  [Initial Placement] Map Center Forced: ${currentMap.getCenter().toArray()}`);
 
                 // Force Stage Center
                 const playerScreenPos = currentMap.project([targetLng, targetLat]);
@@ -223,7 +217,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 }
                 currentStage.pivot.set(playerScreenPos.x, playerScreenPos.y);
                 currentStage.position.set(currentScreen.width / 2, currentScreen.height / 2);
-                console.log(`  [Initial Placement] Stage Centered: Pivot (${playerScreenPos.x.toFixed(0)}, ${playerScreenPos.y.toFixed(0)}), Pos (${currentStage.position.x.toFixed(0)}, ${currentStage.position.y.toFixed(0)})`);
 
                 // Place Player Sprites Directly
                 Object.keys(allPlayersServerState.current).forEach((pId) => {
@@ -234,7 +227,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                         try {
                             const [pLng, pLat] = worldToGeo(pState.x, pState.y);
                             const screenPos = currentMap.project([pLng, pLat]);
-                             console.log(`    Placing player ${pId} (${pState.team}): Screen (${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`);
                             sprite.x = screenPos.x;
                             sprite.y = screenPos.y;
                             sprite.rotation = -pState.heading + Math.PI / 2;
@@ -255,7 +247,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                    try {
                        const [iLng, iLat] = worldToGeo(itemState.x, itemState.y);
                        const screenPos = currentMap.project([iLng, iLat]);
-                       console.log(`    Placing item: Screen (${screenPos.x.toFixed(0)}, ${screenPos.y.toFixed(0)})`);
                        currentItemSprite.x = screenPos.x;
                        currentItemSprite.y = screenPos.y;
                        currentItemSprite.visible = true;
@@ -268,14 +259,12 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 }
 
                 initialPlacementDone.current = true;
-                console.log("GameLoop: Initial placement DONE.");
                 return; // Skip the rest of the loop for this first placement frame
             } catch (e) {
                 console.warn("Error calculating initial placement:", e);
                 initialPlacementDone.current = false;
             }
         } else {
-            console.log("  [Initial Placement] Skipping: Local player state not found or invalid."); // Log reason for skipping
             // mapTargetCenter.current = null; // Keep this commented unless needed
         }
     }
@@ -469,9 +458,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
     if (!tabId) {
         tabId = uuidv4();
         sessionStorage.setItem(SESSION_TAB_ID_KEY, tabId);
-        console.log(`Generated new sessionTabId: ${tabId}`);
-    } else {
-        console.log(`Using existing sessionTabId: ${tabId}`);
     }
     // -----------------------------------
 
@@ -482,7 +468,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
         const joinOptions = { persistentPlayerId: tabId }; // Server expects 'persistentPlayerId'
         const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', joinOptions);
         gameRoom.current = room;
-        console.log(`Joined room '${room.name}' successfully! SessionId: ${room.sessionId}, TabId: ${tabId}`);
 
         // --- Listen for Water Reset Message ---
         room.onMessage("water_reset", () => {
@@ -491,6 +476,58 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             setTimeout(() => {
                 setShowResetMessage(false);
             }, 3000); // Show message for 3 seconds
+        });
+        // -------------------------------------
+
+        // --- Listen for Steal Debug Message ---
+        room.onMessage("debug_steal_check_positions", (payload) => {
+            // console.log("Received debug_steal_check_positions:", payload); // Optional: Log received payload
+            const { carrierX, carrierY, stealerX, stealerY } = payload;
+            const carrierMarker = debugCarrierSprite.current;
+            const stealerMarker = debugStealerSprite.current;
+            const currentMap = mapInstance.current;
+
+            if (carrierMarker && stealerMarker && currentMap &&
+                isFinite(carrierX) && isFinite(carrierY) && isFinite(stealerX) && isFinite(stealerY))
+            {
+                try {
+                    // Convert server coords to screen coords
+                    const [carrierLng, carrierLat] = worldToGeo(carrierX, carrierY);
+                    const carrierScreenPos = currentMap.project([carrierLng, carrierLat]);
+
+                    const [stealerLng, stealerLat] = worldToGeo(stealerX, stealerY);
+                    const stealerScreenPos = currentMap.project([stealerLng, stealerLat]);
+
+                    if (carrierScreenPos && isFinite(carrierScreenPos.x) && isFinite(carrierScreenPos.y) &&
+                        stealerScreenPos && isFinite(stealerScreenPos.x) && isFinite(stealerScreenPos.y))
+                    {
+                        // Position markers
+                        carrierMarker.x = carrierScreenPos.x;
+                        carrierMarker.y = carrierScreenPos.y;
+                        stealerMarker.x = stealerScreenPos.x;
+                        stealerMarker.y = stealerScreenPos.y;
+
+                        // Make visible and set timeout to hide
+                        carrierMarker.visible = true;
+                        stealerMarker.visible = true;
+
+                        // Clear previous timeout if any
+                        if (debugMarkerTimeout.current) {
+                            clearTimeout(debugMarkerTimeout.current);
+                        }
+
+                        debugMarkerTimeout.current = setTimeout(() => {
+                            if (carrierMarker) carrierMarker.visible = false;
+                            if (stealerMarker) stealerMarker.visible = false;
+                            debugMarkerTimeout.current = null;
+                        }, 1000); // Hide after 1 second
+                    }
+                } catch (e) {
+                    console.warn("Error processing debug_steal_check_positions:", e);
+                    if (carrierMarker) carrierMarker.visible = false;
+                    if (stealerMarker) stealerMarker.visible = false;
+                }
+            }
         });
         // -------------------------------------
 
@@ -700,6 +737,26 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 console.error("Error creating base sprites:", baseError);
             }
             // -------------------------------------------
+
+            // --- Create Debug Sprites ---
+            console.log("Setting up debug sprites...");
+            const carrierDebugGfx = new PIXI.Graphics()
+                .circle(0, 0, 8) // Slightly larger circle
+                .fill(0xff00ff); // Magenta
+            carrierDebugGfx.pivot.set(0, 0);
+            carrierDebugGfx.x = -1000; carrierDebugGfx.y = -1000; carrierDebugGfx.visible = false;
+            app!.stage.addChild(carrierDebugGfx);
+            debugCarrierSprite.current = carrierDebugGfx;
+
+            const stealerDebugGfx = new PIXI.Graphics()
+                .circle(0, 0, 6) // Slightly smaller circle
+                .fill(0x00ffff); // Cyan
+            stealerDebugGfx.pivot.set(0, 0);
+            stealerDebugGfx.x = -1000; stealerDebugGfx.y = -1000; stealerDebugGfx.visible = false;
+            app!.stage.addChild(stealerDebugGfx);
+            debugStealerSprite.current = stealerDebugGfx;
+            console.log("Debug sprites created.");
+            // --------------------------
 
             app!.ticker.add(gameLoop);
             tickerAdded = true;

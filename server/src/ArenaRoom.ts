@@ -181,12 +181,26 @@ export class ArenaRoom extends Room<ArenaState> {
         console.warn(`[${sessionId}] Client joined without tabId! Assigning team based on balance.`);
         return this.assignTeamByBalance();
     } else {
-        if (this.persistentIdToTeam.has(tabId)) {
+        // Check if this TabId is already associated with an *active* session
+        const existingSessionId = this.persistentIdToSessionId.get(tabId);
+        if (existingSessionId && this.clients.some(c => c.sessionId === existingSessionId)) {
+             console.warn(`[${sessionId}] TabId (${tabId}) is already active with session ${existingSessionId}. Treating as new connection, assigning team by balance.`);
+             // If active, something is wrong (duplicate tab?), force re-balance
+             const assignedTeam = this.assignTeamByBalance();
+             // Update maps for the *new* session
+             this.persistentIdToTeam.set(tabId, assignedTeam); // Overwrite/update team for this tabId
+             this.persistentIdToSessionId.set(tabId, sessionId); // Assign new session to this tabId
+             console.log(`[${sessionId}] Overwrote/Stored team assignment (${assignedTeam}) for conflicting TabId: ${tabId}`);
+             return assignedTeam;
+        }
+        // Original logic: Check if we remember the team for this TabId from a previous session
+        else if (this.persistentIdToTeam.has(tabId)) {
             const assignedTeam = this.persistentIdToTeam.get(tabId)!;
             console.log(`[${sessionId}] Returning tab session detected (TabId: ${tabId}). Rejoining team: ${assignedTeam}`);
-            this.persistentIdToSessionId.set(tabId, sessionId); // Update mapping
+            this.persistentIdToSessionId.set(tabId, sessionId); // Update mapping (this TabId is now associated with this session)
             return assignedTeam;
         } else {
+            // New TabId, assign by balance
             const assignedTeam = this.assignTeamByBalance();
             console.log(`[${sessionId}] New TabId. Assigning team based on balance: ${assignedTeam}`);
             this.persistentIdToTeam.set(tabId, assignedTeam);
@@ -205,6 +219,7 @@ export class ArenaRoom extends Room<ArenaState> {
       if (p.team === 'Red') redCount++;
       else if (p.team === 'Blue') blueCount++;
     });
+
     const team = (redCount <= blueCount) ? 'Red' : 'Blue';
     console.log(`Team balance check (R:${redCount}, B:${blueCount}) -> Assigning: ${team}`);
     return team;

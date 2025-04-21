@@ -17,13 +17,16 @@ export const ACCELERATION = 300; // meters per second^2 (Increased from 100 for 
 export const FRICTION_FACTOR = 0.75; // Multiplier per second (Lower = More friction, less drift. Was 0.90)
 export const TURN_SPEED = Math.PI * 3.0; // radians per second (Increased from 1.5 * PI)
 
+// Player dimensions for collision checks
+export const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (distance from center to edge/front for checks)
+
 // Gameplay Constants
 export const ROAD_SPEED_MULTIPLIER = 5.0; // Speed boost on roads (Increased from 2.0)
 
 // Collision / Gameplay Radii (Squared for cheaper checks)
-export const PLAYER_COLLISION_RADIUS_SQ = 1.5 * 1.5; // meters^2 (Used for stealing check)
-export const PICKUP_RADIUS_SQ = 4 * 4; // meters^2
-export const BASE_RADIUS_SQ = 10 * 10; // meters^2
+export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for stealing check)
+export const PICKUP_RADIUS_SQ = 4 * 4; // meters^2 (Keep this larger for easier pickup)
+export const BASE_RADIUS_SQ = 30 * 30; // meters^2 (Should match client VISUAL_BASE_RADIUS^2)
 export const STEAL_COOLDOWN_MS = 1500; // milliseconds
 
 // Spawn Area

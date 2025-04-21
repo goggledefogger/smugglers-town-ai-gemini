@@ -43,9 +43,18 @@ const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
 const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId';
 
 // Mirror Server Game Logic Constants (needed for base rendering)
-const BASE_DISTANCE = 150; // Meters from origin along X axis
-const Y_OFFSET = 5; // Small vertical offset from center line
-const BASE_RADIUS = 40; // Meters (for scoring/rendering)
+// const BASE_DISTANCE = 150; // Meters from origin along X axis - REMOVED
+// const Y_OFFSET = 5; // Small vertical offset from center line - REMOVED
+// const BASE_RADIUS = 40; // Meters (for scoring/rendering) - REMOVED
+
+// --- Use Server Constants --- (We'll assume these are known or derived from state later)
+// For rendering purposes, use the server's values:
+const SERVER_BASE_DISTANCE = 80; // meters
+const SERVER_Y_OFFSET = 0; // meters
+// const SERVER_BASE_RADIUS = 10; // meters (sqrt of server's BASE_RADIUS_SQ=100) <- Collision radius - REMOVED (No longer needed here)
+const VISUAL_BASE_RADIUS = 30; // meters <- Should match sqrt(server BASE_RADIUS_SQ)
+// const SERVER_COLLISION_RADIUS = 38.5; // meters <- Actual collision radius from server (for debugging viz) - REMOVED
+const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (from server constants, for debug viz)
 
 // --- Helper Functions --- (REMOVED - Now Imported)
 /*
@@ -137,6 +146,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   // Refs for static base sprites
   const redBaseSprite = useRef<PIXI.Graphics | null>(null);
   const blueBaseSprite = useRef<PIXI.Graphics | null>(null);
+  const debugFrontPointSprite = useRef<PIXI.Graphics | null>(null); // <-- Ref for debug marker
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
@@ -321,6 +331,40 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             }
         });
 
+        // --- Update Debug Front Point Marker (Local Player Only, No Lerp) ---
+        const localSessionId = gameRoom.current?.sessionId;
+        const localPlayerState = localSessionId ? allPlayersServerState.current[localSessionId] : null;
+        const debugSprite = debugFrontPointSprite.current;
+
+        if (localPlayerState && debugSprite && isFinite(localPlayerState.x) && isFinite(localPlayerState.y) && isFinite(localPlayerState.heading)) {
+            try {
+                // Calculate authoritative front point world coordinates
+                const angle = localPlayerState.heading;
+                const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
+                const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
+                const frontX = localPlayerState.x + frontOffsetX;
+                const frontY = localPlayerState.y + frontOffsetY;
+
+                // Convert to screen coordinates
+                const [frontLng, frontLat] = worldToGeo(frontX, frontY);
+                const screenPos = currentMap.project([frontLng, frontLat]);
+
+                if (screenPos && isFinite(screenPos.x) && isFinite(screenPos.y)) {
+                    debugSprite.x = screenPos.x;
+                    debugSprite.y = screenPos.y;
+                    debugSprite.visible = true;
+                } else {
+                    debugSprite.visible = false;
+                }
+            } catch (e) {
+                console.warn("Error updating debug front point marker:", e);
+                debugSprite.visible = false;
+            }
+        } else if (debugSprite) {
+            debugSprite.visible = false; // Hide if no local player state
+        }
+        // ------------------------------------------------------------------
+
         // --- Update Single Item Sprite ---
         const itemState = gameRoom.current?.state.item; // Get single item state
         const currentItemSprite = itemSprite.current; // Use single item sprite ref
@@ -382,21 +426,44 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
         // --- Update Base Sprites (Static World Position) ---
         const baseSprites = [
-            { sprite: redBaseSprite.current, worldPos: { x: -BASE_DISTANCE, y: Y_OFFSET }, color: 'Red' },
-            { sprite: blueBaseSprite.current, worldPos: { x: BASE_DISTANCE, y: -Y_OFFSET }, color: 'Blue' }
+            { sprite: redBaseSprite.current, worldPos: { x: -SERVER_BASE_DISTANCE, y: SERVER_Y_OFFSET }, color: 'Red' },
+            { sprite: blueBaseSprite.current, worldPos: { x: SERVER_BASE_DISTANCE, y: -SERVER_Y_OFFSET }, color: 'Blue' }
         ];
+
+        const baseAlpha = 0.3; // Define alpha here for redraw
 
         baseSprites.forEach(({ sprite, worldPos, color }) => {
             if (sprite) {
                  try {
-                    const [baseLng, baseLat] = worldToGeo(worldPos.x, worldPos.y);
-                    const screenPos = currentMap.project([baseLng, baseLat]);
-                    if (!screenPos || !isFinite(screenPos.x) || !isFinite(screenPos.y)) {
-                         throw new Error(`Failed to project ${color} base`);
-                    }
-                    sprite.x = screenPos.x;
-                    sprite.y = screenPos.y;
-                    sprite.visible = true; // Ensure visible
+                     const [baseLng, baseLat] = worldToGeo(worldPos.x, worldPos.y);
+                     const screenPos = currentMap.project([baseLng, baseLat]);
+
+                     // Calculate edge point in world meters (e.g., 40m to the right)
+                     const edgeWorldX = worldPos.x + VISUAL_BASE_RADIUS;
+                     const edgeWorldY = worldPos.y;
+                     const [edgeLng, edgeLat] = worldToGeo(edgeWorldX, edgeWorldY);
+                     const edgeScreenPos = currentMap.project([edgeLng, edgeLat]);
+
+                     if (!screenPos || !isFinite(screenPos.x) || !isFinite(screenPos.y) ||
+                         !edgeScreenPos || !isFinite(edgeScreenPos.x) || !isFinite(edgeScreenPos.y)) {
+                         throw new Error(`Failed to project ${color} base center or edge`);
+                     }
+
+                     // Calculate pixel radius
+                     const dx = edgeScreenPos.x - screenPos.x;
+                     const dy = edgeScreenPos.y - screenPos.y;
+                     const pixelRadius = Math.sqrt(dx * dx + dy * dy);
+
+                     // --- Redraw circle dynamically ---
+                     const baseColor = color === 'Red' ? 0xff0000 : 0x0000ff;
+                     sprite.clear();
+                     sprite.circle(0, 0, pixelRadius)
+                           .fill({ color: baseColor, alpha: baseAlpha });
+                     // --------------------------------
+
+                     sprite.x = screenPos.x;
+                     sprite.y = screenPos.y;
+                     sprite.visible = true; // Ensure visible
                  } catch (e) {
                     console.warn(`Error updating ${color} base sprite position:`, e);
                     sprite.visible = false;
@@ -617,50 +684,42 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             console.log("Item sprite placeholder added.");
             // ---------------------------------------------
 
+            // --- Create Debug Front Point Marker ---
+            console.log("Setting up debug front point marker...");
+            const debugGfx = new PIXI.Graphics()
+                .circle(0, 0, 5) // Small circle
+                .fill(0xff00ff);   // Magenta color
+            debugGfx.pivot.set(0, 0);
+            debugGfx.x = -1000; debugGfx.y = -1000; debugGfx.visible = false;
+            app!.stage.addChild(debugGfx);
+            debugFrontPointSprite.current = debugGfx;
+            console.log("Debug marker added.");
+            // ---------------------------------------
+
             // --- Create Base Sprites (Static Position) ---
             console.log("Setting up base sprites...");
             const baseAlpha = 0.3; // Make them semi-transparent
 
-            // Define base positions (mirroring server constants for now)
-            // const serverRedBasePos = { x: -BASE_DISTANCE, y: Y_OFFSET }; // Don't need pos here
-            // const serverBlueBasePos = { x: BASE_DISTANCE, y: -Y_OFFSET }; // Don't need pos here
-
             try {
-                // Convert world meters to Geo for projection // REMOVE CONVERSION/PROJECTION
-                // const [redLng, redLat] = worldToGeo(serverRedBasePos.x, serverRedBasePos.y);
-                // const [blueLng, blueLat] = worldToGeo(serverBlueBasePos.x, serverBlueBasePos.y);
-
-                // Project to initial screen coordinates (map should be loaded) // REMOVE PROJECTION
-                // const redScreenPos = mapInstance.current?.project([redLng, redLat]);
-                // const blueScreenPos = mapInstance.current?.project([blueLng, blueLat]);
-
-                // if (!redScreenPos || !blueScreenPos) {
-                //      throw new Error("Could not project base positions during setup");
-                // }
-
                 // Red Base - Create only
                 const redBaseGfx = new PIXI.Graphics()
-                    .circle(0, 0, BASE_RADIUS) // Use server radius
-                    .fill({ color: 0xff0000, alpha: baseAlpha });
+                // Draw the circle dynamically in gameLoop based on projection
                 redBaseGfx.pivot.set(0, 0);
                 redBaseGfx.x = -2000; // Start off-screen
                 redBaseGfx.y = -2000;
                 redBaseGfx.visible = false; // Hide until positioned by gameLoop
                 app!.stage.addChild(redBaseGfx);
                 redBaseSprite.current = redBaseGfx;
-                // console.log(`Red Base added at screen (${redScreenPos.x.toFixed(0)}, ${redScreenPos.y.toFixed(0)})`);
 
-                // Blue Base - Create only
                 const blueBaseGfx = new PIXI.Graphics()
-                    .circle(0, 0, BASE_RADIUS)
-                    .fill({ color: 0x0000ff, alpha: baseAlpha });
+                // Draw the circle dynamically in gameLoop based on projection
                 blueBaseGfx.pivot.set(0, 0);
                 blueBaseGfx.x = -2000; // Start off-screen
                 blueBaseGfx.y = -2000;
                 blueBaseGfx.visible = false; // Hide until positioned by gameLoop
                 app!.stage.addChild(blueBaseGfx);
                 blueBaseSprite.current = blueBaseGfx;
-                // console.log(`Blue Base added at screen (${blueScreenPos.x.toFixed(0)}, ${blueScreenPos.y.toFixed(0)})`);
+
                 console.log("Base sprite placeholders created.");
 
             } catch (baseError) {
@@ -794,7 +853,7 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       <HUD redScore={scores.red} blueScore={scores.blue} /> {/* HUD positioned by its own styles */}
       <AIControls onAddAi={handleAddAi} /> {/* Use the new component */}
 
-      {/* Water Reset Message */} 
+      {/* Water Reset Message */}
       {showResetMessage && (
         <div style={{
           position: 'absolute',

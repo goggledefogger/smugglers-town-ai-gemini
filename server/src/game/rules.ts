@@ -10,6 +10,7 @@ import {
     PICKUP_RADIUS_SQ,
     BASE_RADIUS_SQ,
     PLAYER_COLLISION_RADIUS_SQ,
+    PLAYER_EFFECTIVE_RADIUS,
     STEAL_COOLDOWN_MS,
     RED_BASE_POS,
     BLUE_BASE_POS,
@@ -74,9 +75,26 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
     else if (carrier.team === 'Blue') { targetBasePos = BLUE_BASE_POS; }
 
     if (targetBasePos) {
-        const dSq = distSq(carrier.x, carrier.y, targetBasePos.x, targetBasePos.y);
+        // Calculate front position of the player
+        const angle = carrier.heading;
+        const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
+        const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
+        const frontX = carrier.x + frontOffsetX;
+        const frontY = carrier.y + frontOffsetY;
+
+        // Check distance from player's FRONT to base center
+        const dSq = distSq(frontX, frontY, targetBasePos.x, targetBasePos.y);
+
+        // --- DEBUG LOGGING ---
+        console.log(`[ScoreCheck] Player: ${item.carrierId}, Team: ${carrier.team}`);
+        console.log(`  Center: (${carrier.x.toFixed(2)}, ${carrier.y.toFixed(2)}), Heading: ${angle.toFixed(2)}`);
+        console.log(`  Front: (${frontX.toFixed(2)}, ${frontY.toFixed(2)})`);
+        console.log(`  Base: (${targetBasePos.x.toFixed(2)}, ${targetBasePos.y.toFixed(2)})`);
+        console.log(`  DistSq: ${dSq.toFixed(2)}, BaseRadiusSq: ${BASE_RADIUS_SQ}`);
+        // --- END DEBUG LOGGING ---
+
         if (dSq <= BASE_RADIUS_SQ) {
-            console.log(`[${item.carrierId}] Player ${carrier.name} (${carrier.team}) SCORED with the item!`);
+            console.log(`[${item.carrierId}] Player ${carrier.name} (${carrier.team}) SCORED with the item! (Front check)`);
             // Increment score
             if (carrier.team === 'Red') state.redScore++;
             else state.blueScore++;

@@ -182,3 +182,5 @@ Adding new interactive elements (e.g., different pickups, obstacles, capture poi
         *   If the element should visually attach to a player (like the current item), calculate its position relative to the carrier sprite's screen coordinates and rotation.
 
 4.  **Coordinate System Reminder:** The server operates purely in meters relative to the world origin (`ORIGIN_LNG`, `ORIGIN_LAT`). The client is responsible for converting these meter coordinates to Lng/Lat for MapLibre projection to get the correct screen coordinates for Pixi rendering.
+
+5.  **Base Radius Sync:** Ensure the visual base radius on the client (`client/src/features/GameCanvas.tsx::VISUAL_BASE_RADIUS`) matches the intended collision radius on the server (`sqrt(server/src/config/constants.ts::BASE_RADIUS_SQ)`). The server collision logic uses the player's front point against this radius.

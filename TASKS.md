@@ -36,11 +36,13 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 ## In Progress Tasks
 
-(Empty)
+- [x] Investigate and fix base collision detection
+  * Note: Base collision uses player's front point. Visual radius (`client/.../GameCanvas.tsx::VISUAL_BASE_RADIUS`) should match collision radius (`sqrt(server/.../constants.ts::BASE_RADIUS_SQ)`).
+- [ ] Improve HUD with game state info (score, timer, etc.)
+- [ ] Refine player/item sprite graphics/animations (Golden Toilet!)
 
 ## Future Tasks
 
-- [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 - [ ] Address schema duplication (create shared package or use monorepo tools) - POSTPONED (needs design)
 - [ ] Improve HUD with game state info (score, timer, etc.)
 - [ ] Refine player sprite graphics/animations (Golden Toilet!)
@@ -49,6 +51,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [ ] Database integration (player accounts, stats persistence - if needed)
 - [ ] Deployment configuration (client and server)
 - [ ] Address `npm audit` vulnerabilities
+- [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 
 ## Implementation Plan
 

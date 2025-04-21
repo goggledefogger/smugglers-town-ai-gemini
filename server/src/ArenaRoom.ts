@@ -135,7 +135,7 @@ export class ArenaRoom extends Room<ArenaState> {
             velocity = { vx: 0, vy: 0 };
             this.playerVelocities.set(sessionId, velocity);
         }
-        updateHumanPlayerState(player, input, velocity, dt);
+        updateHumanPlayerState(player, sessionId, input, velocity, dt);
     });
 
     // 3. Apply Game Rules (after all players have moved)

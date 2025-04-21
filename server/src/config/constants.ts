@@ -5,16 +5,20 @@
  */
 
 // Constants for server-side physics (world units = meters)
-export const MAX_SPEED_WORLD = 200; // m/s (~720 kph / 450 mph)
-export const ACCEL_RATE_WORLD = 15; // Factor per second - Reduced for smooth lerp!
-export const TURN_SMOOTH_WORLD = 12; // Factor per second
-export const DRAG_FACTOR = 0.1; // Coefficient for linear drag (higher = more drag)
+// REMOVE THESE -> Likely incorrect values being used
+// export const MAX_SPEED_WORLD = 200; // m/s (~720 kph / 450 mph)
+// export const ACCEL_RATE_WORLD = 15; // Factor per second - Reduced for smooth lerp!
+// export const TURN_SMOOTH_WORLD = 12; // Factor per second
+// export const DRAG_FACTOR = 0.1; // Coefficient for linear drag (higher = more drag)
 
-// Player movement
-export const MAX_SPEED = 15; // meters per second
-export const ACCELERATION = 50; // meters per second^2
-export const FRICTION_FACTOR = 0.90; // Multiplier per second
-export const TURN_SPEED = Math.PI * 1.5; // radians per second
+// Player movement physics constants (ensure these are used)
+export const MAX_SPEED = 30; // meters per second (Increased from 15)
+export const ACCELERATION = 300; // meters per second^2 (Increased from 100 for testing lerp effect)
+export const FRICTION_FACTOR = 0.75; // Multiplier per second (Lower = More friction, less drift. Was 0.90)
+export const TURN_SPEED = Math.PI * 3.0; // radians per second (Increased from 1.5 * PI)
+
+// Gameplay Constants
+export const ROAD_SPEED_MULTIPLIER = 5.0; // Speed boost on roads (Increased from 2.0)
 
 // Collision / Gameplay Radii (Squared for cheaper checks)
 export const PLAYER_COLLISION_RADIUS_SQ = 1.5 * 1.5; // meters^2 (Used for stealing check)

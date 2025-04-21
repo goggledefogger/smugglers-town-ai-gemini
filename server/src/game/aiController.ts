@@ -7,10 +7,10 @@
 import { ArenaState, Player } from "../schemas/ArenaState";
 import { lerp, angleLerp } from "../utils/helpers";
 import {
-    MAX_SPEED_WORLD,
-    ACCEL_RATE_WORLD,
-    DRAG_FACTOR,
-    TURN_SMOOTH_WORLD,
+    MAX_SPEED,
+    ACCELERATION,
+    FRICTION_FACTOR,
+    TURN_SPEED,
     AI_SPEED_MULTIPLIER,
     AI_ACCEL_MULTIPLIER,
     RED_BASE_POS,
@@ -71,6 +71,8 @@ export function updateAIState(
     let targetWorldDirX = 0; // For heading
     let targetWorldDirY = 0; // For heading
 
+    const aiSpeedLimit = MAX_SPEED * AI_SPEED_MULTIPLIER; // Define here
+
     if (targetFound) {
         const dirX = targetX - aiPlayer.x;
         const dirY = targetY - aiPlayer.y;
@@ -79,22 +81,33 @@ export function updateAIState(
         if (dist > 0.1) { // Threshold to prevent jittering
             targetWorldDirX = dirX / dist;
             targetWorldDirY = dirY / dist;
-            targetVelX = targetWorldDirX * MAX_SPEED_WORLD * AI_SPEED_MULTIPLIER;
-            targetVelY = targetWorldDirY * MAX_SPEED_WORLD * AI_SPEED_MULTIPLIER;
+            targetVelX = targetWorldDirX * aiSpeedLimit;
+            targetVelY = targetWorldDirY * aiSpeedLimit;
         }
     }
 
     // 3. Apply Movement Physics (modify velocity object)
-    // Apply Drag
-    const dragFactor = 1.0 - Math.min(DRAG_FACTOR * dt, 1.0);
-    velocity.vx *= dragFactor;
-    velocity.vy *= dragFactor;
+    // Apply Friction (using FRICTION_FACTOR)
+    const friction = Math.pow(FRICTION_FACTOR, dt);
+    velocity.vx *= friction;
+    velocity.vy *= friction;
 
-    // Apply Acceleration
-    const aiAccelRate = ACCEL_RATE_WORLD * AI_ACCEL_MULTIPLIER;
-    const accelFactor = Math.min(aiAccelRate * dt, 1.0);
-    velocity.vx = lerp(velocity.vx, targetVelX, accelFactor);
-    velocity.vy = lerp(velocity.vy, targetVelY, accelFactor);
+    // Apply Acceleration (using ACCELERATION * AI_ACCEL_MULTIPLIER)
+    const aiAcceleration = ACCELERATION * AI_ACCEL_MULTIPLIER;
+    const accelX = targetWorldDirX * aiAcceleration * dt;
+    const accelY = targetWorldDirY * aiAcceleration * dt;
+
+    velocity.vx += accelX;
+    velocity.vy += accelY;
+
+    // Clamp velocity to the AI's speed limit
+    const currentSpeedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+    const maxSpeedSq = aiSpeedLimit * aiSpeedLimit; // Now accessible
+    if (currentSpeedSq > maxSpeedSq) {
+        const speedReductionFactor = Math.sqrt(maxSpeedSq / currentSpeedSq);
+        velocity.vx *= speedReductionFactor;
+        velocity.vy *= speedReductionFactor;
+    }
 
     // 4. Update AI Player State (Position & Heading)
     // Update Position
@@ -112,8 +125,9 @@ export function updateAIState(
         targetHeading = Math.atan2(targetWorldDirY, targetWorldDirX);
     }
     if (isFinite(targetHeading)) {
-        const turnFactor = Math.min(TURN_SMOOTH_WORLD * dt, 1.0);
-        aiPlayer.heading = angleLerp(aiPlayer.heading, targetHeading, turnFactor);
+        // Use TURN_SPEED constant for AI turning
+        const turnAmount = TURN_SPEED * dt;
+        aiPlayer.heading = angleLerp(aiPlayer.heading, targetHeading, turnAmount);
     } else {
         console.warn(`[${sessionId}] Invalid targetHeading (${targetHeading}) for AI, skipping rotation update.`);
     }

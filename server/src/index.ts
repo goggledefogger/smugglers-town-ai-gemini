@@ -1,3 +1,7 @@
+import dotenv from 'dotenv';
+dotenv.config(); // Load environment variables from .env file
+
+import path from 'path';
 import http from 'http';
 import express from 'express';
 import { Server } from 'colyseus';

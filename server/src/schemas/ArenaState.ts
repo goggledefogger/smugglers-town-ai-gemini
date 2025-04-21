@@ -25,6 +25,7 @@ export class ArenaState extends Schema {
   // Add game state fields
   @type("number") redScore: number = 0;
   @type("number") blueScore: number = 0;
+  @type("number") gameTimeRemaining: number = 300; // e.g., 5 minutes = 300 seconds
 
   // Single generic item instead of two flags
   @type(FlagState) item = new FlagState(); // Represents the single pickup item

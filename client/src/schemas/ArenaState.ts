@@ -34,6 +34,8 @@ export class ArenaState extends Schema {
   @type("number") redScore: number = 0;
   @type("number") blueScore: number = 0;
 
+  @type("number") gameTimeRemaining: number = 300; // Must match server default
+
   // Match server: Single generic item
   @type(FlagState) item = new FlagState(); // Represents the single pickup item
 

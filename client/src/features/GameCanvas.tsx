@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid'; // Import uuid
 import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
 import { Player, ArenaState, FlagState } from "../schemas/ArenaState"; // <-- Remove ZoneState import
+import goldenToiletUrl from '/assets/golden-toilet.svg'; // <-- Import the SVG
 import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, ORIGIN_LNG } from '../utils/coordinateUtils'; // Corrected path to assumed utils dir
 
 // Map and Style
@@ -54,7 +55,6 @@ const SERVER_Y_OFFSET = 0; // meters
 // const SERVER_BASE_RADIUS = 10; // meters (sqrt of server's BASE_RADIUS_SQ=100) <- Collision radius - REMOVED (No longer needed here)
 const VISUAL_BASE_RADIUS = 30; // meters <- Should match sqrt(server BASE_RADIUS_SQ)
 // const SERVER_COLLISION_RADIUS = 38.5; // meters <- Actual collision radius from server (for debugging viz) - REMOVED
-const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (from server constants, for debug viz)
 
 // --- Helper Functions --- (REMOVED - Now Imported)
 /*
@@ -140,16 +140,16 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const mapTargetCenter = useRef<LngLat | null>(null);
   const colyseusClient = useRef<Client | null>(null);
   const gameRoom = useRef<ArenaRoomType | null>(null);
-  const itemSprite = useRef<PIXI.Graphics | null>(null);
+  const itemSprite = useRef<PIXI.Sprite | null>(null);
   const initialStateProcessed = useRef<boolean>(false);
   const initialPlacementDone = useRef<boolean>(false);
   // Refs for static base sprites
   const redBaseSprite = useRef<PIXI.Graphics | null>(null);
   const blueBaseSprite = useRef<PIXI.Graphics | null>(null);
-  const debugFrontPointSprite = useRef<PIXI.Graphics | null>(null); // <-- Ref for debug marker
 
   // --- State ---
   const [scores, setScores] = useState<{ red: number; blue: number }>({ red: 0, blue: 0 });
+  const [gameTimeRemaining, setGameTimeRemaining] = useState<number | undefined>(undefined);
   const [showResetMessage, setShowResetMessage] = useState(false); // <-- Add state for reset message
 
   // Debug refs for local-only panning test
@@ -330,40 +330,6 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 sprite.visible = false;
             }
         });
-
-        // --- Update Debug Front Point Marker (Local Player Only, No Lerp) ---
-        const localSessionId = gameRoom.current?.sessionId;
-        const localPlayerState = localSessionId ? allPlayersServerState.current[localSessionId] : null;
-        const debugSprite = debugFrontPointSprite.current;
-
-        if (localPlayerState && debugSprite && isFinite(localPlayerState.x) && isFinite(localPlayerState.y) && isFinite(localPlayerState.heading)) {
-            try {
-                // Calculate authoritative front point world coordinates
-                const angle = localPlayerState.heading;
-                const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
-                const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
-                const frontX = localPlayerState.x + frontOffsetX;
-                const frontY = localPlayerState.y + frontOffsetY;
-
-                // Convert to screen coordinates
-                const [frontLng, frontLat] = worldToGeo(frontX, frontY);
-                const screenPos = currentMap.project([frontLng, frontLat]);
-
-                if (screenPos && isFinite(screenPos.x) && isFinite(screenPos.y)) {
-                    debugSprite.x = screenPos.x;
-                    debugSprite.y = screenPos.y;
-                    debugSprite.visible = true;
-                } else {
-                    debugSprite.visible = false;
-                }
-            } catch (e) {
-                console.warn("Error updating debug front point marker:", e);
-                debugSprite.visible = false;
-            }
-        } else if (debugSprite) {
-            debugSprite.visible = false; // Hide if no local player state
-        }
-        // ------------------------------------------------------------------
 
         // --- Update Single Item Sprite ---
         const itemState = gameRoom.current?.state.item; // Get single item state
@@ -554,6 +520,9 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             // Update the ref object for player states
             allPlayersServerState.current = newState;
 
+            // Update game timer state
+            setGameTimeRemaining(state.gameTimeRemaining);
+
             // Update scores state
             setScores({ red: state.redScore, blue: state.blueScore });
 
@@ -674,27 +643,32 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
 
             // --- Create Single Item Sprite Placeholder ---
             console.log("Setting up single item sprite placeholder...");
-            const itemGfx = new PIXI.Graphics()
-                .circle(0, 0, 15) // Simple circle for the item
-                .fill(0xFFFF00); // Yellow color
-            itemGfx.pivot.set(0, 0); // Pivot at center of circle
-            itemGfx.x = -1000; itemGfx.y = -1000; itemGfx.visible = false;
-            app!.stage.addChild(itemGfx);
-            itemSprite.current = itemGfx;
-            console.log("Item sprite placeholder added.");
-            // ---------------------------------------------
+            // --- Preload and Create Golden Toilet Sprite ---
+            try {
+                await PIXI.Assets.load(goldenToiletUrl); // Explicitly load the SVG
+                console.log(`Asset loaded: ${goldenToiletUrl}`);
+                const itemTexture = PIXI.Assets.get(goldenToiletUrl);
+                if (!itemTexture) throw new Error("Failed to get texture after loading");
 
-            // --- Create Debug Front Point Marker ---
-            console.log("Setting up debug front point marker...");
-            const debugGfx = new PIXI.Graphics()
-                .circle(0, 0, 5) // Small circle
-                .fill(0xff00ff);   // Magenta color
-            debugGfx.pivot.set(0, 0);
-            debugGfx.x = -1000; debugGfx.y = -1000; debugGfx.visible = false;
-            app!.stage.addChild(debugGfx);
-            debugFrontPointSprite.current = debugGfx;
-            console.log("Debug marker added.");
-            // ---------------------------------------
+                const itemGfx = new PIXI.Sprite(itemTexture);
+                itemGfx.anchor.set(0.5); // Set anchor to center
+                // Adjust scale if needed - SVGs might render large initially
+                itemGfx.scale.set(0.5); // Example: scale down by half
+
+                // itemGfx.pivot.set(0, 0); // No longer needed with anchor set
+                itemGfx.x = -1000; itemGfx.y = -1000; itemGfx.visible = false;
+                app!.stage.addChild(itemGfx);
+                itemSprite.current = itemGfx; // Store the Sprite
+                console.log("Item sprite placeholder added from loaded SVG.");
+            } catch (loadError) {
+                console.error("Failed to load or create item sprite:", loadError);
+                // Optionally create a fallback graphic if loading fails
+                const fallbackGfx = new PIXI.Graphics().circle(0,0,10).fill(0xff00ff);
+                fallbackGfx.x = -1000; fallbackGfx.y = -1000; fallbackGfx.visible = false;
+                app!.stage.addChild(fallbackGfx);
+                // itemSprite.current = fallbackGfx; // Assign if needed, but type mismatch (Sprite vs Graphics)
+            }
+            // ---------------------------------------------
 
             // --- Create Base Sprites (Static Position) ---
             console.log("Setting up base sprites...");
@@ -850,7 +824,11 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
       </div>
 
       {/* UI Elements (High Z-Index) */}
-      <HUD redScore={scores.red} blueScore={scores.blue} /> {/* HUD positioned by its own styles */}
+      <HUD
+        redScore={scores.red}
+        blueScore={scores.blue}
+        gameTimeRemaining={gameTimeRemaining}
+      /> {/* HUD positioned by its own styles */}
       <AIControls onAddAi={handleAddAi} /> {/* Use the new component */}
 
       {/* Water Reset Message */}

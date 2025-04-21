@@ -4,9 +4,20 @@ interface HUDProps {
   // Props for scores, timer, etc. will be added later
   redScore: number;
   blueScore: number;
+  gameTimeRemaining: number | undefined; // Can be undefined initially
 }
 
-const HUD: React.FC<HUDProps> = ({ redScore, blueScore }) => {
+// Helper to format seconds into MM:SS
+const formatTime = (totalSeconds: number | undefined): string => {
+  if (totalSeconds === undefined || totalSeconds < 0) {
+    return "--:--"; // Placeholder or loading state
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     position: 'absolute',
@@ -44,7 +55,7 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore }) => {
       {/* Display Scores */}
       <div style={blueScoreStyle}>{blueScore}</div>
       {/* Placeholder Timer */}
-      <div style={timerStyle}>5:00</div>
+      <div style={timerStyle}>{formatTime(gameTimeRemaining)}</div>
       {/* Display Scores */}
       <div style={redScoreStyle}>{redScore}</div>
     </div>

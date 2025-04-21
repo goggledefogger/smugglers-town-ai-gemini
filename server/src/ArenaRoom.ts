@@ -25,6 +25,9 @@ type RoadStatus = { isOnRoad: boolean, lastQueryTime: number };
 // Constants for road query
 const ROAD_QUERY_INTERVAL_MS = 500;
 
+// Define GAME_DURATION_SECONDS here
+const GAME_DURATION_SECONDS = 5 * 60; // 5 minutes
+
 export class ArenaRoom extends Room<ArenaState> {
 
   // --- Room State ---
@@ -49,6 +52,10 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.redScore = 0;
     this.state.blueScore = 0;
     resetItemState(this.state.item); // Use helper to init item
+
+    // Initialize timer using constant
+    this.state.gameTimeRemaining = GAME_DURATION_SECONDS;
+    console.log(`Game timer initialized to ${this.state.gameTimeRemaining} seconds.`);
 
     // Initialize road status cache (empty)
     this.playerRoadStatusCache = new Map<string, RoadStatus>();
@@ -168,7 +175,12 @@ export class ArenaRoom extends Room<ArenaState> {
     this.aiPlayers.forEach(aiSessionId => {
         const aiPlayer = this.state.players.get(aiSessionId);
         let velocity = this.playerVelocities.get(aiSessionId);
-        if (!aiPlayer) return; // Should not happen if aiPlayers set is correct
+        if (!aiPlayer) {
+            console.warn(`[Update] AI Player ${aiSessionId} not found in state during update.`);
+            this.aiPlayers.delete(aiSessionId); // Clean up bookkeeping
+            this.playerVelocities.delete(aiSessionId); // Clean up velocity map
+            return;
+        }
         if (!velocity) { // Ensure velocity map entry exists
             velocity = { vx: 0, vy: 0 };
             this.playerVelocities.set(aiSessionId, velocity);
@@ -196,6 +208,18 @@ export class ArenaRoom extends Room<ArenaState> {
         const isOnRoad = this.playerRoadStatusCache.get(sessionId)?.isOnRoad ?? false;
         // Pass isOnRoad status to updateHumanPlayerState
         updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
+
+        // --- Update Game Timer ---
+        if (this.state.gameTimeRemaining > 0) {
+            this.state.gameTimeRemaining -= dt;
+            if (this.state.gameTimeRemaining <= 0) {
+                this.state.gameTimeRemaining = 0;
+                console.log("GAME OVER! Timer reached zero.");
+                // TODO: Implement game over logic (e.g., lock room, determine winner)
+                // this.lock(); // Example: Prevent further joins/actions
+            }
+        }
+        // -----------------------
     });
 
     // 3. Apply Game Rules (after all players have moved)

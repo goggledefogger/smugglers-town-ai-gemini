@@ -13,10 +13,17 @@ import {
     checkStealing,
     updateCarriedItemPosition
 } from "./game/rules";
+import { worldToGeo } from "./utils/coordinateUtils"; // <-- Import coordinate utils
+import { getMapFeaturesAtPoint, responseHasRoad } from "./utils/mapApiUtils"; // <-- Import map API utils
 
 // Define types for internal room state maps
 type PlayerInput = { dx: number, dy: number };
 type PlayerVelocity = { vx: number, vy: number };
+// Define type for road status cache entries
+type RoadStatus = { isOnRoad: boolean, lastQueryTime: number };
+
+// Constants for road query
+const ROAD_QUERY_INTERVAL_MS = 500;
 
 export class ArenaRoom extends Room<ArenaState> {
 
@@ -32,6 +39,7 @@ export class ArenaRoom extends Room<ArenaState> {
   private persistentIdToTeam = new Map<string, "Red" | "Blue">();
   // Counter for AI IDs (keep state within the room instance)
   private aiCounter = 1;
+  private playerRoadStatusCache = new Map<string, RoadStatus>(); // <-- Add road status cache
 
   // --- Lifecycle Methods ---
 
@@ -41,6 +49,9 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.redScore = 0;
     this.state.blueScore = 0;
     resetItemState(this.state.item); // Use helper to init item
+
+    // Initialize road status cache (empty)
+    this.playerRoadStatusCache = new Map<string, RoadStatus>();
 
     console.log(`Initialized item at (${this.state.item.x}, ${this.state.item.y})`);
 
@@ -91,6 +102,10 @@ export class ArenaRoom extends Room<ArenaState> {
     // Remove player state
     this.removePlayerState(client.sessionId);
 
+    // Remove player from road cache on leave
+    this.playerRoadStatusCache.delete(client.sessionId);
+    console.log(`[${client.sessionId}] Removed from road status cache.`);
+
     // Check if AI needs removal
     this.checkAndRemoveAI();
   }
@@ -109,6 +124,45 @@ export class ArenaRoom extends Room<ArenaState> {
     }
 
     const playerIds = Array.from(this.state.players.keys());
+    const now = Date.now();
+
+    // --- Perform Road Status Checks (Throttled) ---
+    playerIds.forEach(sessionId => {
+        const player = this.state.players.get(sessionId);
+        if (!player) return; // Skip if player left mid-tick
+
+        const cachedStatus = this.playerRoadStatusCache.get(sessionId) || { isOnRoad: false, lastQueryTime: 0 };
+        const timeSinceLastQuery = now - cachedStatus.lastQueryTime;
+
+        if (timeSinceLastQuery > ROAD_QUERY_INTERVAL_MS) {
+            // Mark cache immediately to prevent concurrent queries
+            this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, lastQueryTime: now });
+
+            try {
+                const [lon, lat] = worldToGeo(player.x, player.y);
+                // console.log(`[${player.name}] Triggering road query at ${lat}, ${lon}`); // Debug
+                getMapFeaturesAtPoint(lon, lat)
+                    .then(apiResponse => {
+                        if (apiResponse) {
+                            const foundRoad = responseHasRoad(apiResponse);
+                            if (foundRoad !== cachedStatus.isOnRoad) { // Log only if status changes
+                                console.log(`[${player.name}] Road status CHANGED -> ${foundRoad}`);
+                            }
+                            // Update cache with the actual result
+                            this.playerRoadStatusCache.set(sessionId, { isOnRoad: foundRoad, lastQueryTime: now });
+                        } // No else needed, retain old status on API error
+                    })
+                    .catch(err => {
+                        console.error(`[${player.name}] Error during background road query:`, err);
+                    });
+            } catch (convErr) {
+                console.error(`[${player.name}] Error converting worldToGeo for road query:`, convErr);
+                // Reset query time in cache so it retries sooner after conversion error
+                this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, lastQueryTime: 0 });
+            }
+        }
+    });
+    // --- End Road Status Checks ---
 
     // 1. Update AI Players
     this.aiPlayers.forEach(aiSessionId => {
@@ -119,7 +173,10 @@ export class ArenaRoom extends Room<ArenaState> {
             velocity = { vx: 0, vy: 0 };
             this.playerVelocities.set(aiSessionId, velocity);
         }
-        updateAIState(aiPlayer, aiSessionId, velocity, this.state, dt);
+        // Get current road status from cache
+        const isOnRoad = this.playerRoadStatusCache.get(aiSessionId)?.isOnRoad ?? false;
+        // Pass sessionId and isOnRoad status to updateAIState
+        updateAIState(aiPlayer, aiSessionId, velocity, this.state, isOnRoad, dt);
     });
 
     // 2. Update Human Players
@@ -135,7 +192,10 @@ export class ArenaRoom extends Room<ArenaState> {
             velocity = { vx: 0, vy: 0 };
             this.playerVelocities.set(sessionId, velocity);
         }
-        updateHumanPlayerState(player, sessionId, input, velocity, dt);
+        // Get current road status from cache
+        const isOnRoad = this.playerRoadStatusCache.get(sessionId)?.isOnRoad ?? false;
+        // Pass isOnRoad status to updateHumanPlayerState
+        updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
     });
 
     // 3. Apply Game Rules (after all players have moved)

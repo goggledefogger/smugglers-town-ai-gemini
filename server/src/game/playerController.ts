@@ -6,8 +6,6 @@
 
 import { Player } from "../schemas/ArenaState";
 import { lerp, angleLerp, isPointInRectangle } from "../utils/helpers";
-import { worldToGeo } from "../utils/coordinateUtils";
-import { getMapFeaturesAtPoint, responseHasRoad } from "../utils/mapApiUtils";
 import {
     MAX_SPEED,
     ACCELERATION,
@@ -33,9 +31,9 @@ const ROAD_QUERY_INTERVAL_MS = 500; // How often to query Mapbox (milliseconds)
  */
 export function updateHumanPlayerState(
     player: Player,
-    sessionId: string, // Pass sessionId for caching
     input: PlayerInput,
     velocity: PlayerVelocity,
+    isOnRoad: boolean,
     dt: number
 ): void {
     const inputDirX = input.dx;
@@ -55,9 +53,7 @@ export function updateHumanPlayerState(
     velocity.vx *= friction;
     velocity.vy *= friction;
 
-    // --- Road Speed Check (using cache) ---
-    const cachedStatus = playerRoadStatusCache.get(sessionId);
-    const isOnRoad = cachedStatus ? cachedStatus.isOnRoad : false; // Default to off-road
+    // --- Road Speed Check (Now uses passed-in status) ---
     const currentSpeedLimit = isOnRoad ? MAX_SPEED * ROAD_SPEED_MULTIPLIER : MAX_SPEED;
 
     // Calculate Target Velocity Vector (Direction * Speed Limit)
@@ -94,8 +90,6 @@ export function updateHumanPlayerState(
         velocity.vy = 0;
         player.justReset = true;
         // Optional: Reset heading? Maybe keep it as is.
-        // Clear road cache on reset as well
-        playerRoadStatusCache.delete(sessionId);
     } else {
         // Update Position only if not in water
         player.x = nextX;
@@ -113,41 +107,5 @@ export function updateHumanPlayerState(
         player.heading = angleLerp(player.heading, targetHeading, turnAmount); // Use turnAmount directly for lerp factor over time
     } else {
         console.warn(`[${player.name}] Invalid targetHeading, skipping rotation.`);
-    }
-
-    // --- Trigger Asynchronous Road Query (throttled) ---
-    const now = Date.now();
-    const lastQueryTime = cachedStatus ? cachedStatus.lastQueryTime : 0;
-
-    if (now - lastQueryTime > ROAD_QUERY_INTERVAL_MS) {
-        // Mark cache immediately to prevent concurrent queries for the same user
-        playerRoadStatusCache.set(sessionId, { isOnRoad: isOnRoad, lastQueryTime: now });
-
-        try {
-            const [lon, lat] = worldToGeo(player.x, player.y);
-            // console.log(`[${player.name}] Triggering road query at ${lat}, ${lon}`);
-            getMapFeaturesAtPoint(lon, lat)
-                .then(apiResponse => {
-                    if (apiResponse) {
-                        const foundRoad = responseHasRoad(apiResponse);
-                        // Uncomment to see detailed query results
-                        // console.log(`[${player.name}] Road query result: ${foundRoad}. Response:`, JSON.stringify(apiResponse));
-                        if (foundRoad !== isOnRoad) { // Log only if status changes
-                            console.log(`[${player.name}] Road status CHANGED -> ${foundRoad}`);
-                        }
-                        // Update cache with the actual result
-                        playerRoadStatusCache.set(sessionId, { isOnRoad: foundRoad, lastQueryTime: now });
-                    }
-                    // If response is null, cache retains previous 'isOnRoad' status until next successful query
-                })
-                .catch(err => {
-                     console.error(`[${player.name}] Error during background road query:`, err);
-                     // Don't update cache on error, keep previous status
-                 });
-        } catch (convErr) {
-            console.error(`[${player.name}] Error converting worldToGeo for road query:`, convErr);
-            // Reset query time in cache so it retries sooner after conversion error
-             playerRoadStatusCache.set(sessionId, { isOnRoad: isOnRoad, lastQueryTime: 0 });
-        }
     }
 }

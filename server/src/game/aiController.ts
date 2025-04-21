@@ -13,6 +13,7 @@ import {
     TURN_SPEED,
     AI_SPEED_MULTIPLIER,
     AI_ACCEL_MULTIPLIER,
+    ROAD_SPEED_MULTIPLIER,
     RED_BASE_POS,
     BLUE_BASE_POS
 } from "../config/constants";
@@ -27,9 +28,10 @@ type PlayerVelocity = { vx: number, vy: number };
  */
 export function updateAIState(
     aiPlayer: Player,
-    sessionId: string, // For logging
+    sessionId: string,
     velocity: PlayerVelocity,
-    state: ArenaState, // Pass the whole ArenaState for context
+    state: ArenaState,
+    isOnRoad: boolean,
     dt: number
 ): void {
     let targetX = 0;
@@ -71,7 +73,10 @@ export function updateAIState(
     let targetWorldDirX = 0; // For heading
     let targetWorldDirY = 0; // For heading
 
-    const aiSpeedLimit = MAX_SPEED * AI_SPEED_MULTIPLIER; // Define here
+    // Apply road speed boost if applicable
+    const currentAISpeedLimit = isOnRoad
+        ? MAX_SPEED * AI_SPEED_MULTIPLIER * ROAD_SPEED_MULTIPLIER
+        : MAX_SPEED * AI_SPEED_MULTIPLIER;
 
     if (targetFound) {
         const dirX = targetX - aiPlayer.x;
@@ -81,8 +86,8 @@ export function updateAIState(
         if (dist > 0.1) { // Threshold to prevent jittering
             targetWorldDirX = dirX / dist;
             targetWorldDirY = dirY / dist;
-            targetVelX = targetWorldDirX * aiSpeedLimit;
-            targetVelY = targetWorldDirY * aiSpeedLimit;
+            targetVelX = targetWorldDirX * currentAISpeedLimit;
+            targetVelY = targetWorldDirY * currentAISpeedLimit;
         }
     }
 
@@ -100,9 +105,9 @@ export function updateAIState(
     velocity.vx += accelX;
     velocity.vy += accelY;
 
-    // Clamp velocity to the AI's speed limit
+    // Clamp velocity to the AI's potentially boosted speed limit
     const currentSpeedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-    const maxSpeedSq = aiSpeedLimit * aiSpeedLimit; // Now accessible
+    const maxSpeedSq = currentAISpeedLimit * currentAISpeedLimit;
     if (currentSpeedSq > maxSpeedSq) {
         const speedReductionFactor = Math.sqrt(maxSpeedSq / currentSpeedSq);
         velocity.vx *= speedReductionFactor;

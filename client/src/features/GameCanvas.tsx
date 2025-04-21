@@ -18,7 +18,7 @@ if (!MAP_STYLE_URL) {
     // Potentially fall back to a default or throw an error
 }
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
-const INITIAL_ZOOM = 17; // Zoom closer
+const INITIAL_ZOOM = 19; // Zoom closer (Increased from 17)
 
 // World Origin constants moved to coordinateUtils
 // const ORIGIN_LNG = INITIAL_CENTER[0];
@@ -34,8 +34,8 @@ const TURN_SMOOTH = 12;
 
 // Client-side visual tuning
 const INTERPOLATION_FACTOR = 0.3; // Keep the factor from before
-const CAR_WIDTH = 20;
-const CAR_HEIGHT = 40;
+const CAR_WIDTH = 10; // Reduced from 20
+const CAR_HEIGHT = 20; // Reduced from 40
 
 // Colyseus Endpoint
 const COLYSEUS_ENDPOINT = 'ws://localhost:2567'; // Re-enabled
@@ -246,6 +246,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 if (itemState && currentItemSprite && (itemState.status === 'atBase' || itemState.status === 'dropped') && isFinite(itemState.x) && isFinite(itemState.y)) {
                    try {
                        const [iLng, iLat] = worldToGeo(itemState.x, itemState.y);
+                       // Ensure scale is set (adjust as needed)
+                       currentItemSprite.scale.set(0.5); // Assuming original SVG size is reasonable
                        const screenPos = currentMap.project([iLng, iLat]);
                        currentItemSprite.x = screenPos.x;
                        currentItemSprite.y = screenPos.y;
@@ -338,6 +340,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                 if (isFinite(itemState.x) && isFinite(itemState.y)) {
                     try {
                         const [targetLng, targetLat] = worldToGeo(itemState.x, itemState.y);
+                        // Ensure scale is set (adjust as needed)
+                        currentItemSprite.scale.set(0.5); // Assuming original SVG size is reasonable
                         const targetScreenPos = currentMap.project([targetLng, targetLat]);
                         if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) {
                             throw new Error(`Invalid projected screen pos for item`);
@@ -357,13 +361,20 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
                     : otherPlayerSprites.current[itemState.carrierId];
 
                  if (carrierSprite && carrierSprite.visible) {
-                    const offsetX = 0;
-                    const offsetY = CAR_HEIGHT / 2 + 5; // Position behind carrier
-                    const angle = carrierSprite.rotation;
-                    const rotatedOffsetX = offsetX * Math.cos(angle) - offsetY * Math.sin(angle);
-                    const rotatedOffsetY = offsetX * Math.sin(angle) + offsetY * Math.cos(angle);
-                    targetX = carrierSprite.x + rotatedOffsetX;
-                    targetY = carrierSprite.y + rotatedOffsetY;
+                    // Ensure scale is set (adjust as needed)
+                    currentItemSprite.scale.set(0.5);
+
+                    // Position relative to the carrier sprite
+                    const distanceBehind = CAR_HEIGHT / 2 + 5; // Distance behind carrier center
+                    const angle = carrierSprite.rotation - Math.PI / 2; // Carrier's forward direction angle
+
+                    // Calculate offset in screen space relative to carrier rotation
+                    const offsetX = Math.cos(angle) * distanceBehind;
+                    const offsetY = Math.sin(angle) * distanceBehind;
+
+                    // Apply offset to carrier's screen position
+                    targetX = carrierSprite.x + offsetX;
+                    targetY = carrierSprite.y + offsetY;
                     shouldBeVisible = true;
                  } else {
                     shouldBeVisible = false;

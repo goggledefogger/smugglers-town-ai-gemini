@@ -21,7 +21,7 @@ export const TURN_SPEED = Math.PI * 3.0; // radians per second (Increased from 1
 export const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (distance from center to edge/front for checks)
 
 // Gameplay Constants
-export const ROAD_SPEED_MULTIPLIER = 5.0; // Speed boost on roads (Increased from 2.0)
+export const ROAD_SPEED_MULTIPLIER = 3; // Speed on roads is half of base speed (Was 5.0)
 
 // Collision / Gameplay Radii (Squared for cheaper checks)
 export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for stealing check)

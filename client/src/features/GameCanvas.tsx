@@ -20,10 +20,6 @@ if (!MAP_STYLE_URL) {
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
 const INITIAL_ZOOM = 19; // Zoom closer (Increased from 17)
 
-// World Origin constants moved to coordinateUtils
-// const ORIGIN_LNG = INITIAL_CENTER[0];
-// const ORIGIN_LAT = INITIAL_CENTER[1];
-// const METERS_PER_DEGREE_LAT_APPROX = 111320;
 
 // Game Constants - Focus on Pixel Speed for now
 // const MAX_SPEED_MPS = 14; // Target real-world speed (for later)
@@ -56,56 +52,12 @@ const SERVER_Y_OFFSET = 0; // meters
 const VISUAL_BASE_RADIUS = 30; // meters <- Should match sqrt(server BASE_RADIUS_SQ)
 // const SERVER_COLLISION_RADIUS = 38.5; // meters <- Actual collision radius from server (for debugging viz) - REMOVED
 
-// --- Helper Functions --- (REMOVED - Now Imported)
-/*
-function lerp(start: number, end: number, factor: number): number {
-  return start + factor * (end - start);
-}
+// --- Base Positions (Client-side copy for rendering/UI logic) ---
+const RED_BASE_POS = { x: -SERVER_BASE_DISTANCE, y: SERVER_Y_OFFSET };
+const BLUE_BASE_POS = { x: SERVER_BASE_DISTANCE, y: -SERVER_Y_OFFSET };
+// ------------------------------------------------------------------
 
-function angleLerp(startAngle: number, endAngle: number, factor: number): number {
-  const delta = endAngle - startAngle;
-  const shortestAngle = ((delta + Math.PI) % (2 * Math.PI)) - Math.PI;
-  return startAngle + factor * shortestAngle;
-}
 
-// Helper to get meters per degree longitude at a given latitude
-function metersPerDegreeLngApprox(latitude: number): number {
-    // Ensure latitude is within valid range to avoid Math.cos issues
-    const clampedLat = Math.max(-85, Math.min(85, latitude));
-    const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180);
-    return meters > 1 ? meters : 1; // Avoid returning 0 or negative for extreme latitudes or edge cases
-}
-
-// Convert Geo coords (Lng/Lat) to world meters relative to origin
-function geoToWorld(lng: number, lat: number): [number, number] { // [x_meters, y_meters]
-    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin latitude for approximation
-    const deltaLng = lng - ORIGIN_LNG;
-    const deltaLat = lat - ORIGIN_LAT;
-    const x_meters = deltaLng * metersPerLng;
-    const y_meters = deltaLat * METERS_PER_DEGREE_LAT_APPROX; // Use constant for latitude
-    return [x_meters, y_meters];
-}
-
-// Convert world meters (relative to origin) back to approximate Geo coords
-function worldToGeo(x_meters: number, y_meters: number): [number, number] { // [lng, lat]
-    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin lat for approximation
-    if (!isFinite(metersPerLng) || metersPerLng === 0) {
-        console.warn("worldToGeo: Invalid metersPerLng, returning origin");
-        return [ORIGIN_LNG, ORIGIN_LAT]; // Avoid division by zero
-    }
-    const deltaLng = x_meters / metersPerLng;
-    const deltaLat = y_meters / METERS_PER_DEGREE_LAT_APPROX;
-    const resultLng = ORIGIN_LNG + deltaLng;
-    const resultLat = ORIGIN_LAT + deltaLat;
-
-    // Basic sanity check for resulting coordinates
-    if (!isFinite(resultLng) || !isFinite(resultLat) || Math.abs(resultLat) > 90) {
-        console.warn(`worldToGeo: Calculation resulted in invalid coordinates (${resultLng}, ${resultLat}) from input (${x_meters}, ${y_meters}). Returning origin.`);
-        return [ORIGIN_LNG, ORIGIN_LAT];
-    }
-    return [resultLng, resultLat];
-}
-*/
 
 // Helper to draw the car sprite
 function drawCar(graphics: PIXI.Graphics, team: string) {
@@ -150,6 +102,8 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
   const debugCarrierSprite = useRef<PIXI.Graphics | null>(null);
   const debugStealerSprite = useRef<PIXI.Graphics | null>(null);
   const debugMarkerTimeout = useRef<NodeJS.Timeout | null>(null);
+  // --- Navigation Arrow Ref ---
+  const navigationArrowSprite = useRef<PIXI.Graphics | null>(null);
   // ------------------
 
   // --- State ---
@@ -437,6 +391,92 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             }
         });
         // --------------------------------------------------
+
+        // --- Update Navigation Arrow ---
+        const arrowSprite = navigationArrowSprite.current;
+        if (arrowSprite && gameRoom.current?.state && gameRoom.current?.sessionId && pixiApp.current && mapInstance.current) {
+            const app = pixiApp.current;
+            const map = mapInstance.current;
+            const state = gameRoom.current.state;
+            const localSessionId = gameRoom.current.sessionId;
+            const localPlayer = state.players.get(localSessionId);
+            const item = state.item;
+
+            let targetWorldX: number | null = null;
+            let targetWorldY: number | null = null;
+            let arrowColor: number = 0xFFFFFF; // Default white
+
+            if (localPlayer) {
+                // 1. Determine Target
+                if (item.status === 'carried' && item.carrierId === localSessionId) {
+                    // Player is carrying: Target own base
+                    const basePos = localPlayer.team === 'Red' ? RED_BASE_POS : BLUE_BASE_POS;
+                    targetWorldX = basePos.x;
+                    targetWorldY = basePos.y;
+                    arrowColor = localPlayer.team === 'Red' ? 0xff0000 : 0x0000ff;
+                } else if (item.status === 'carried') {
+                    // Someone else is carrying: Target the carrier
+                    const carrier = state.players.get(item.carrierId!);
+                    if (carrier) {
+                        targetWorldX = carrier.x;
+                        targetWorldY = carrier.y;
+                        arrowColor = carrier.team === 'Red' ? 0xff0000 : 0x0000ff;
+                    }
+                } else if (item.status === 'dropped' || item.status === 'atBase') {
+                    // Item is available: Target the item
+                    targetWorldX = item.x;
+                    targetWorldY = item.y;
+                    arrowColor = 0xFFFF00; // Yellow for neutral item
+                }
+
+                // 2. Calculate Angle and Position
+                if (targetWorldX !== null && targetWorldY !== null) {
+                    try {
+                        // Project target world coords to screen coords
+                        const [targetLng, targetLat] = worldToGeo(targetWorldX, targetWorldY);
+                        const targetScreenPos = map.project([targetLng, targetLat]);
+
+                        if (targetScreenPos && isFinite(targetScreenPos.x) && isFinite(targetScreenPos.y)) {
+                            const localCarSprite = carSprite.current;
+
+                            // Define arrow position on screen (top-center)
+                            const screenWidth = app.screen.width;
+                            const arrowScreenX = screenWidth / 2;
+                            const arrowScreenY = 80; // Increased margin from top to move below HUD
+                            const arrowScreenPoint = new PIXI.Point(arrowScreenX, arrowScreenY);
+
+                            // Convert screen position to stage's local coordinates
+                            const arrowStagePos = app.stage.toLocal(arrowScreenPoint);
+
+                            // Calculate angle from PLAYER CAR position to target screen pos
+                            if (localCarSprite) {
+                                const dx = targetScreenPos.x - localCarSprite.x;
+                                const dy = targetScreenPos.y - localCarSprite.y;
+                                const angle = Math.atan2(dy, dx);
+
+                                // Update arrow sprite
+                                arrowSprite.position.set(arrowStagePos.x, arrowStagePos.y);
+                                arrowSprite.rotation = angle + Math.PI / 2; // Point arrow tip towards target
+                                arrowSprite.tint = arrowColor; // Use tint for Graphics color change
+                                arrowSprite.visible = true;
+                            } else {
+                                arrowSprite.visible = false; // Hide if local car sprite is missing
+                            }
+                        } else {
+                            arrowSprite.visible = false; // Hide if target projection fails
+                        }
+                    } catch (e) {
+                        console.warn("Error updating navigation arrow:", e);
+                        arrowSprite.visible = false;
+                    }
+                } else {
+                    arrowSprite.visible = false; // Hide if no valid target
+                }
+            } else {
+                 arrowSprite.visible = false; // Hide if local player doesn't exist
+            }
+        }
+        // --- End Navigation Arrow Update ---
 
     } // End of if (pixiApp.current && mapInstance.current)
 
@@ -768,6 +808,26 @@ const GameCanvas: React.FC<GameCanvasProps> = () => {
             debugStealerSprite.current = stealerDebugGfx;
             console.log("Debug sprites created.");
             // --------------------------
+
+            // --- Create Navigation Arrow Sprite Placeholder ---
+            console.log("Setting up navigation arrow sprite...");
+            const arrowGfx = new PIXI.Graphics();
+            const arrowHeight = 40;
+            const arrowWidth = 36;
+            arrowGfx.poly([
+                { x: 0, y: -arrowHeight / 2 },                     // Top point (pivot)
+                { x: arrowWidth / 2, y: arrowHeight / 2 },         // Bottom right
+                { x: 0, y: arrowHeight / 4 },                      // Inset point at base middle (adjust y for notch depth)
+                { x: -arrowWidth / 2, y: arrowHeight / 2 }         // Bottom left
+            ]).fill(0xFFFFFF); // Start white
+            // ---------------------------------------------
+            arrowGfx.pivot.set(0, 0); // Pivot at the tip for rotation
+            arrowGfx.position.set(-1000, -1000); // Start off-screen
+            arrowGfx.visible = false;
+            app!.stage.addChild(arrowGfx);
+            navigationArrowSprite.current = arrowGfx;
+            console.log("Navigation arrow sprite created.");
+            // ------------------------------------------------
 
             app!.ticker.add(gameLoop);
             tickerAdded = true;

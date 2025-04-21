@@ -134,6 +134,7 @@ The client uses three distinct layers for rendering visuals:
     *   **Updates:** Redrawn every frame in the `gameLoop` for smooth, map-synchronized movement and placement.
     *   **Important:** To correctly position a PixiJS object (like a Sprite or Graphics) on the map, you *must* perform the Meter -> Lat/Lng -> Screen Pixel conversion within the `gameLoop` and apply the resulting **screen pixel coordinates** to the object's `x` and `y` properties (for sprites/positioned objects) or use them directly in drawing commands like `moveTo/lineTo` (for graphics). This ensures the object stays aligned with the map as it pans and zooms.
     *   **Note:** The base map zoom level and client-side sprite sizes (`CAR_WIDTH`, `CAR_HEIGHT`, item scale) have been adjusted in `GameCanvas.tsx` for better visual scale.
+    *   Includes a dynamic navigation arrow fixed to the top-center of the screen, pointing towards the current objective (item, carrier, or player's base).
 
 3.  **HUD/Static UI Layer (React/HTML/CSS):**
     *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, buttons, status messages).

@@ -36,6 +36,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 ## In Progress Tasks
 
+- [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
 - [x] Investigate and fix base collision detection
   * Note: Base collision uses player's front point. Visual radius (`client/.../GameCanvas.tsx::VISUAL_BASE_RADIUS`) should match collision radius (`sqrt(server/.../constants.ts::BASE_RADIUS_SQ)`).
 - [ ] Improve HUD with game state info (score, timer✅, etc.)

@@ -27,7 +27,11 @@
     /* Aliases */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@smugglers-town/shared-utils": ["../shared-utils/dist"],
+      "@smugglers-town/shared-utils/*": ["../shared-utils/dist/*"],
+      "@smugglers-town/shared-schemas": ["../shared-schemas/dist"],
+      "@smugglers-town/shared-schemas/*": ["../shared-schemas/dist/*"]
     }
   },
   "include": ["src"],

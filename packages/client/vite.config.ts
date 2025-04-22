@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000, // Match the port used in the reference repo if desired
+    host: true, // Allow connections from any host
+    port: 3010, // Use port 3010
   }
 })

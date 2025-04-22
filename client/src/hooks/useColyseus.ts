@@ -87,15 +87,6 @@ export function useColyseus() {
                 // Calculate scored items count
                 const scoredCount = newState.items.filter(item => item.status === 'scored').length;
 
-                // *** DEBUG LOGGING START ***
-                // FIX: Use roomRef.current.sessionId directly as state.sessionId might not be updated yet.
-                const currentSessionId = roomRef.current?.sessionId;
-                const playerInfo = currentSessionId ? newState.players.get(currentSessionId) : undefined;
-                console.log(`[useColyseus] onStateChange: My Session ID = ${currentSessionId ?? 'N/A'}, Received Team = ${playerInfo?.team ?? 'N/A'}, Player Exists = ${!!playerInfo}`);
-                // Log all players for context (can be noisy)
-                // console.log('[useColyseus] All Players in State:', Object.fromEntries(newState.players.entries()));
-                // *** DEBUG LOGGING END ***
-
                 setState(prevState => ({
                     ...prevState,
                     // Update players Map (create new map for react change detection)

@@ -33,12 +33,11 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Refactor server room logic into separate modules (constants, helpers, controllers, rules)
 - [x] Implement manual AI spawning via client message (`add_ai`)
 - [x] Add basic UI buttons for triggering AI spawn
+- [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
+- [x] Investigate and fix team persistence / orphan car bug on refresh (including base collision timing issues)
 
 ## In Progress Tasks
 
-- [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
-- [x] Investigate and fix base collision detection
-  * Note: Base collision uses player's front point. Visual radius (`client/.../GameCanvas.tsx::VISUAL_BASE_RADIUS`) should match collision radius (`sqrt(server/.../constants.ts::BASE_RADIUS_SQ)`).
 - [ ] Improve HUD with game state info (score, timer✅, etc.)
 - [ ] Refine player/item sprite graphics/animations (Golden Toilet ✅ - Basic GFX added)
 
@@ -59,6 +58,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [ ] Deployment configuration (client and server)
 - [ ] Address `npm audit` vulnerabilities
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
+- [ ] Implement 'hot-swap' refresh (immediate replacement of old player instance)
 
 ## Implementation Plan
 

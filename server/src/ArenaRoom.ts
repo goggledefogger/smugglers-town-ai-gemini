@@ -160,7 +160,6 @@ export class ArenaRoom extends Room<ArenaState> {
     if (this.periodicLogTimer >= 10) { // Log approx every 10 seconds
       this.periodicLogTimer = 0; // Reset timer
       const playerSessionIds = Array.from(this.state.players.keys());
-      console.log(`---> [Periodic Player Check] Player Count: ${playerSessionIds.length}, Session IDs: ${JSON.stringify(playerSessionIds)}`);
     }
     // -----------------------
 

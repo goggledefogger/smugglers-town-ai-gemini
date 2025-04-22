@@ -37,11 +37,18 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Investigate and fix team persistence / orphan car bug on refresh (including base collision timing issues)
 - [x] Modify item transfer logic: Allow transfer on collision between teammates (not just opponents)
 - [x] Modify scoring: Make Red/Blue scores persistent totals across rounds
+- [x] Restructure project into packages (client, server, shared-utils, shared-schemas)
+- [x] Create shared utility package (`@smugglers-town/shared-utils`)
+- [x] Move shared constants (Base positions, Coordinates, etc.) to `shared-utils`
+- [x] Move shared helper functions (`lerp`, `angleLerp`, `distSq`) to `shared-utils`
+- [x] Update client and server to import from shared packages
+- [x] Fix path alias and build issues related to shared packages
 
 ## In Progress Tasks
 
 - [ ] Improve HUD with game state info (score, timer✅, etc.)
 - [ ] Refine player/item sprite graphics/animations (Golden Toilet ✅ - Basic GFX added)
+- [ ] Move remaining client coordinate utilities (`worldToGeo`, etc.) to `shared-utils`
 
 ## Future Tasks
 
@@ -67,25 +74,27 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 The game uses a server-authoritative architecture with client-side interpolation. The client renders the game world based on state updates received from the server and sends user input.
 
-- **Server (`server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop (`setSimulationInterval`). Player state (`ArenaState.ts`) uses meters relative to a world origin. Handles player connections, input, authoritative physics calculations, collision detection (player-item, player-player, player-base), single item pickup/stealing logic, scoring logic, **and basic AI control**.
-- **Client (`client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. It converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates (`lerp`, `angleLerp`) visual elements between state updates for smoothness. Contains specific logic in the `gameLoop` to handle correct initial sprite placement after connection/refresh, ensuring map/stage are centered before placing sprites based on the first received server state.
+- **Server (`packages/server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop. Uses shared schemas (`@smugglers-town/shared-schemas`) for state and shared utilities (`@smugglers-town/shared-utils`) for constants/helpers. Handles player connections, input, authoritative physics calculations, collision detection, game rules, and AI control.
+- **Client (`packages/client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. Uses shared schemas (`@smugglers-town/shared-schemas`) and utilities (`@smugglers-town/shared-utils`). Converts server meter coordinates to geographic coordinates (`worldToGeo` - currently local util) for map positioning and sprite projection. Interpolates visual elements between state updates.
 
 ### Relevant Files
 
 - ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates, **and rendering UI components (HUD, AIControls)**. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
 - ✅ `client/src/components/HUD.tsx`: Displays game scores.
 - ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players.
+- ✅ `client/src/hooks/...`: Various hooks for Colyseus connection, input, map, Pixi app, and game loop logic.
 - ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules).
 - ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
 - ✅ `server/src/game/playerController.ts`: Handles human player movement logic.
 - ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing).
-- ✅ `server/src/config/constants.ts`: Defines game constants.
-- ✅ `server/src/utils/helpers.ts`: Contains utility functions (lerp, distSq, etc.).
-- ✅ `server/src/schemas/ArenaState.ts`: Defines the shared state structure (`Player`, `FlagState`, `ArenaState`) synchronized between server and clients using `@colyseus/schema`. Includes a single generic item.
-- ⚠️ `client/src/schemas/ArenaState.ts`: (Temporary) Duplicated schema definition for the client. Needs refactoring to match server (single item).
+- ✅ `server/src/config/constants.ts`: Defines server-specific game constants.
+- ✅ `server/src/utils/...`: Server-specific utility functions.
+- ✅ `packages/shared-schemas/src/index.ts`: Exports the shared state structure (`Player`, `FlagState`, `ArenaState`) defined using `@colyseus/schema`.
+- ✅ `packages/shared-utils/src/index.ts`: Exports shared constants and utility functions.
 - ✅ `server/src/index.ts`: Entry point for the Colyseus server setup.
 - ✅ `client/src/main.tsx`: Entry point for the React client application.
-- ✅ `server/package.json`, `client/package.json`: Project dependencies.
-- ✅ `server/tsconfig.json`, `client/tsconfig.json`: TypeScript configurations.
+- ✅ `package.json` (in root and packages): Project dependencies and scripts.
+- ✅ `tsconfig.json` (in root and packages): TypeScript configurations.
+- ✅ `pnpm-workspace.yaml`: Defines PNPM workspaces.
 - ✅ `.env`: Environment variables (e.g., `VITE_MAPLIBRE_STYLE_URL`).
 - ✅ `TASKS.md`: This file.

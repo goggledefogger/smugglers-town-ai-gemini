@@ -36,7 +36,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
     - PixiJS (v8)
     - MapLibre GL JS (v4)
     - Colyseus JavaScript Client (`colyseus.js`)
-    - Tailwind CSS (for HUD - planned)
+    - Tailwind CSS (for HUD)
 - **Backend (Server):**
     - Node.js (v18+ recommended, v20 specified in `package.json`)
     - TypeScript
@@ -44,12 +44,13 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
     - `nodemon` (for development)
 - **Development:**
     - `npm` (Node Package Manager)
+    - `pnpm` (for workspace management)
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js (v18 or v20 recommended)
-- npm
+- `pnpm` (Install globally: `npm install -g pnpm`)
 
 ### Setup
 1.  **Clone the repository:**
@@ -64,28 +65,22 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
       ```
     - Replace `"YOUR_MAPLIBRE_STYLE_URL"` with a valid MapLibre style URL (e.g., from MapTiler Cloud, Stadia Maps, etc.).
 3.  **Install Dependencies:**
-    - Install server dependencies:
+    - From the **root directory** (`smugglers-town-ai-gemini`), install all dependencies for all packages using `pnpm`:
       ```bash
-      cd server
-      npm install
-      ```
-    - Install client dependencies:
-      ```bash
-      cd ../client
-      npm install
+      pnpm install
       ```
 
 ### Running Locally
 1.  **Start the Colyseus Server:**
-    - Open a terminal in the `server/` directory:
+    - From the **root directory**, run the server's dev script:
       ```bash
-      npm run dev
+      pnpm --filter server dev
       ```
     - The server will start (usually on `ws://localhost:2567`) and automatically restart on file changes thanks to `nodemon`.
 2.  **Start the React Client:**
-    - Open a second terminal in the `client/` directory:
+    - From the **root directory**, run the client's dev script:
       ```bash
-      npm run dev
+      pnpm --filter client dev
       ```
     - Vite will build the client and provide a local URL (usually `http://localhost:5173`).
 3.  **Open the Game:**
@@ -95,26 +90,31 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 ## Project Structure
 
 ```
-.
-├── client/           # React Frontend (Vite, TypeScript, PixiJS, MapLibre)
-│   ├── public/
-│   │   ├── components/ # React UI components (e.g., HUD)
-│   │   ├── features/   # Core game logic (e.g., GameCanvas)
-│   │   ├── schemas/    # (Temporary) Duplicated Colyseus schemas
-│   │   └── ...
-│   ├── .env          # Client environment variables (needs creation)
-│   ├── index.html
-│   ├── package.json
-│   └── tsconfig.json
-├── server/           # Colyseus Backend (Node.js, TypeScript)
-│   ├── src/
-│   │   ├── schemas/    # Authoritative Colyseus state schemas
-│   │   ├── ArenaRoom.ts # Main game room logic, including player lifecycle, input handling, physics, collision detection, game rules, and AI control.
-│   │   └── index.ts     # Server entry point
-│   ├── package.json
-│   └── tsconfig.json
-├── .gitignore
-├── README.md         # This file
+. Smugglers Town AI (Monorepo Root)
+├── packages/
+│   ├── client/           # React Frontend (Vite, TS, PixiJS, MapLibre)
+│   │   ├── src/          # Client source code (components, hooks, features)
+│   │   ├── public/       # Static assets
+│   │   ├── .env          # Client environment variables (needs creation)
+│   │   ├── index.html
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── server/           # Colyseus Backend (Node.js, TS)
+│   │   ├── src/          # Server source code (ArenaRoom, game logic, utils)
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── shared-schemas/   # Shared Colyseus state schemas (@smugglers-town/shared-schemas)
+│   │   ├── src/          # Schema definitions (ArenaState, Player, FlagState)
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── shared-utils/     # Shared constants and utility functions (@smugglers-town/shared-utils)
+│   │   ├── src/          # Constants, coordinate utils, math helpers
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── .gitignore
+│   ├── pnpm-workspace.yaml # Defines the workspaces
+│   ├── package.json        # Root package.json (may contain root scripts)
+│   └── README.md         # This file
 └── TASKS.md          # Development task tracking
 ```
 
@@ -157,8 +157,8 @@ Adding new interactive elements (e.g., different pickups, obstacles, capture poi
 1.  **Define State (Schema):**
     *   Add the necessary state properties for the new element to a `Schema` class (e.g., `ItemState`, `ObstacleState`) in `server/src/schemas/ArenaState.ts`.
     *   Include properties like position (`x`, `y` in meters), status, owner/carrier ID, etc.
-    *   Add an instance of this new schema type to the main `ArenaState` class.
-    *   **(Temporary):** Duplicate these schema changes in `client/src/schemas/ArenaState.ts`.
+    *   Add an instance of this new schema type to the main `ArenaState` class in `packages/shared-schemas/src/ArenaState.ts`.
+    *   Ensure the schema is compiled (`pnpm --filter @smugglers-town/shared-schemas build`).
 
 2.  **Implement Server Logic (`server/src/ArenaRoom.ts`):**
     *   **Initialization (`onCreate`):** Set the initial state (position, status) for the new element(s).
@@ -166,23 +166,7 @@ Adding new interactive elements (e.g., different pickups, obstacles, capture poi
         *   Add collision checks between players and the new element using the defined world coordinates (meters) and radii.
         *   Implement the game logic that happens on collision (e.g., picking up, triggering an effect, modifying player state, modifying element state).
         *   Handle any necessary state resets or position updates for the element (e.g., moving with a carrier, resetting after scoring).
-    *   **Lifecycle (`onLeave`):** Handle cases where a player carrying/interacting with the element leaves the game.
+    *   **Lifecycle (`onLeave`, etc.):** Handle cases where a player carrying/interacting with the element leaves the game.
 
 3.  **Implement Client Rendering (`client/src/features/GameCanvas.tsx`):**
-    *   **Create Sprite Placeholder (`setupPixi` in `useEffect`):** Create a `PIXI.Graphics` or `PIXI.Sprite` object for the element, start it off-screen and invisible, and store it in a `useRef`.
-    *   **Get State:** Access the element's state directly from the `gameRoom.current.state` object within the `gameLoop`.
-    *   **Initial Placement (`gameLoop` - `!initialPlacementDone` block):**
-        *   On the first frame after connection, get the element's world position (`x`, `y`) from the state.
-        *   Convert meters to Geo (`worldToGeo`).
-        *   Project Geo to screen coordinates (`map.project`).
-        *   Set the sprite's `x`, `y`, and `visible` properties directly (no interpolation).
-    *   **Update Position/Visibility (`gameLoop` - regular update):**
-        *   Get the element's current world position and status from the state.
-        *   Convert/Project to get the target screen position.
-        *   Update the sprite's `x` and `y` using interpolation (`lerp`) towards the target screen position.
-        *   Set the sprite's `visible` property based on its status (e.g., hide if carried and rendered attached to player, show if at base/dropped).
-        *   If the element should visually attach to a player (like the current item), calculate its position relative to the carrier sprite's screen coordinates and rotation.
-
-4.  **Coordinate System Reminder:** The server operates purely in meters relative to the world origin (`ORIGIN_LNG`, `ORIGIN_LAT`). The client is responsible for converting these meter coordinates to Lng/Lat for MapLibre projection to get the correct screen coordinates for Pixi rendering.
-
-5.  **Base Radius Sync:** Ensure the visual base radius on the client (`client/src/features/GameCanvas.tsx::VISUAL_BASE_RADIUS`) matches the intended collision radius on the server (`sqrt(server/src/config/constants.ts::BASE_RADIUS_SQ)`). The server collision logic uses the player's front point against this radius.
+    *   **Create Sprite Placeholder (`setupPixi` in `useEffect`

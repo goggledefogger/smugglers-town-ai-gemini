@@ -3,24 +3,25 @@
  *
  * Helper functions for coordinate conversions (Server-side).
  */
-import { METERS_PER_DEGREE_LAT_APPROX } from "@smugglers-town/shared-utils"; // Import shared constant
+import { METERS_PER_DEGREE_LAT_APPROX, metersPerDegreeLngApprox } from "@smugglers-town/shared-utils"; // Import shared constant AND helper
 
 // Coordinate conversion utilities for the server
 
 // Define World Origin Constants (used for conversions)
 export const ORIGIN_LNG = -73.985;
 export const ORIGIN_LAT = 40.758;
-// export const METERS_PER_DEGREE_LAT_APPROX = 111320; // MOVED TO SHARED-UTILS
+// METERS_PER_DEGREE_LAT_APPROX MOVED TO SHARED-UTILS
 
 /**
  * Calculates approximate meters per degree longitude at a given latitude.
  */
-export function metersPerDegreeLngApprox(latitude: number): number {
-    // Ensure latitude is within valid range to avoid Math.cos issues
-    const clampedLat = Math.max(-85, Math.min(85, latitude));
-    const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180);
-    return meters > 1 ? meters : 1; // Avoid returning 0 or negative for extreme latitudes or edge cases
-}
+// MOVED TO SHARED-UTILS
+// export function metersPerDegreeLngApprox(latitude: number): number {
+//     // Ensure latitude is within valid range to avoid Math.cos issues
+//     const clampedLat = Math.max(-85, Math.min(85, latitude));
+//     const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180);
+//     return meters > 1 ? meters : 1; // Avoid returning 0 or negative for extreme latitudes or edge cases
+// }
 
 /**
  * Converts world meters (relative to origin) back to approximate Geo coords [Lng, Lat].

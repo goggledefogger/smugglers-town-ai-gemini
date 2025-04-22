@@ -3,15 +3,14 @@ import * as PIXI from 'pixi.js';
 import { Room } from 'colyseus.js';
 import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
-import { lerp, angleLerp, worldToGeo } from '../utils/coordinateUtils'; // Adjust path
+import { lerp, angleLerp, worldToGeo } from '../utils/coordinateUtils'; // TODO: Move this to shared-utils?
 import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar
-import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
+import { RED_BASE_POS, BLUE_BASE_POS, distSq } from "@smugglers-town/shared-utils"; // Import shared constants AND distSq
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
 const VISUAL_BASE_RADIUS = 30;
 const CAR_HEIGHT = 20; // From usePixiApp
-const NUM_ITEMS = 4; // From server constants
 
 interface UseGameLoopProps {
     pixiRefs: React.RefObject<PixiRefs>;
@@ -433,10 +432,3 @@ export function useGameLoop({
     // This hook doesn't return anything directly, it manages the loop
     // and interacts via refs and callbacks.
 }
-
-// Helper function for distance squared (copied from aiController, consider utils)
-const distSq = (x1: number, y1: number, x2: number, y2: number): number => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    return dx * dx + dy * dy;
-};

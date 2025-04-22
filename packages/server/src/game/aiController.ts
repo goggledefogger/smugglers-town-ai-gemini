@@ -6,7 +6,7 @@
 
 // import { calculateAngle } from "../utils/helpers"; // REMOVED - Incorrect import
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { lerp, angleLerp } from "../utils/helpers";
+import { lerp, angleLerp } from "@smugglers-town/shared-utils"; // Use shared utils
 import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
 import {
     MAX_SPEED,

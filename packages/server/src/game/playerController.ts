@@ -4,20 +4,23 @@
  * Logic for updating human player state based on input.
  */
 
-import { Player } from "@smugglers-town/shared-schemas";
-import { lerp, angleLerp, isPointInRectangle } from "../utils/helpers";
+import { Player, ArenaState } from "@smugglers-town/shared-schemas";
+import { isPointInRectangle } from "../utils/helpers";
+import { lerp, angleLerp } from "@smugglers-town/shared-utils";
 import {
     MAX_SPEED,
     ACCELERATION,
     FRICTION_FACTOR,
     TURN_SPEED,
     WATER_ZONE,
-    ROAD_SPEED_MULTIPLIER
+    ROAD_SPEED_MULTIPLIER,
 } from "../config/constants";
+import * as ServerConstants from "../config/constants";
 
 // Define types for input and velocity maps for clarity
 type PlayerInput = { dx: number, dy: number };
 type PlayerVelocity = { vx: number, vy: number };
+type InputMap = Record<string, boolean>;
 
 // Cache for storing results of road queries (SessionID -> {isOnRoad, lastQueryTime})
 // In a real app, manage this cache more robustly (e.g., in ArenaRoom, handle player leave)

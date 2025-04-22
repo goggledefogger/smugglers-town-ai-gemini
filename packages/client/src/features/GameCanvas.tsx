@@ -9,7 +9,6 @@ import AIControls from '../components/AIControls'; // <-- Use default import
 import { Player, ArenaState, FlagState } from "@smugglers-town/shared-schemas"; // <-- Remove ZoneState import
 import goldenToiletUrl from '/assets/golden-toilet.svg'; // <-- Import the SVG
 import { ORIGIN_LNG, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
-// import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox } from '../utils/coordinateUtils'; // REMOVED - Will import from shared-utils
 
 // Map and Style
 // Read style URL from environment variable

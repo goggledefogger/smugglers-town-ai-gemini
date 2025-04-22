@@ -5,7 +5,6 @@
  */
 
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { distSq } from "../utils/helpers";
 import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils";
 import {
     PICKUP_RADIUS_SQ,
@@ -15,6 +14,7 @@ import {
     STEAL_COOLDOWN_MS,
     ITEM_START_POS
 } from "../config/constants";
+import { distSq } from "@smugglers-town/shared-utils";
 
 /**
  * Checks for item pickups by any player.

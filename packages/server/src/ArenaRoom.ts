@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 // Import constants, helpers, and controllers
 import * as Constants from "./config/constants";
-import { lerp, angleLerp, distSq } from "./utils/helpers"; // Keep helpers needed directly in room (if any)
+import * as ServerConstants from "./config/constants"; // Alias server-specific constants
+import { NUM_ITEMS, lerp, angleLerp, distSq } from "@smugglers-town/shared-utils"; // Import shared utils
 import { updateAIState } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
 import {
@@ -470,9 +471,9 @@ export class ArenaRoom extends Room<ArenaState> {
       const newItem = new FlagState();
       newItem.id = itemId;
       newItem.status = 'available';
-      // Random position within spawn radius
+      // Random position within spawn radius - USE SERVER CONSTANT
       const angle = Math.random() * Math.PI * 2;
-      const radius = Math.random() * Constants.ITEM_SPAWN_RADIUS;
+      const radius = Math.random() * ServerConstants.ITEM_SPAWN_RADIUS;
       newItem.x = Math.cos(angle) * radius;
       newItem.y = Math.sin(angle) * radius;
       newItem.carrierId = null;
@@ -484,12 +485,12 @@ export class ArenaRoom extends Room<ArenaState> {
   private resetRound(): void {
     console.log("Executing resetRound...");
 
-    // Clear existing items from state AND refs
+    // Clear existing items from state
     this.state.items.clear();
     console.log(` -> Cleared existing items. Count: ${this.state.items.length}`);
 
-    // Spawn new items
-    for (let i = 0; i < Constants.NUM_ITEMS; i++) {
+    // Spawn new items using the shared constant
+    for (let i = 0; i < NUM_ITEMS; i++) {
         const newItemId = `item-${i}`;
         const newItem = this.spawnNewItem(newItemId);
         this.state.items.push(newItem);

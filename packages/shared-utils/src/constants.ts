@@ -13,3 +13,6 @@ export const ORIGIN_LAT = INITIAL_CENTER[1];
 
 // Coordinate Conversion Constants
 export const METERS_PER_DEGREE_LAT_APPROX = 111320; // Approx meters per degree latitude
+
+// Gameplay Constants
+export const NUM_ITEMS = 4; // Number of items to spawn each round

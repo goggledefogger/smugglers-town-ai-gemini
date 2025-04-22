@@ -138,19 +138,19 @@ const GameCanvas: React.FC = () => {
         // updateHudState removed
     });
 
-    return (
-        <div style={{ position: 'relative', width: '100%', height: '100vh' }} className="z-0">
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100vh' }} className="z-0">
             {/* Map & Canvas Layers */}
             <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} className="z-10" />
             <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} className="z-20">
                 {/* Pixi canvas appended here by usePixiApp */}
-            </div>
+      </div>
 
             {/* UI Elements */}
-            <HUD
-                redScore={scores.red}
-                blueScore={scores.blue}
-                gameTimeRemaining={gameTimeRemaining}
+      <HUD
+        redScore={scores.red}
+        blueScore={scores.blue}
+        gameTimeRemaining={gameTimeRemaining}
                 localPlayerTeam={localPlayerTeam}
                 itemsScoredCount={itemsScoredCount} // Use scored count
             />
@@ -166,17 +166,17 @@ const GameCanvas: React.FC = () => {
             </div>
 
             {/* Water Reset Message (Keep local state for now) */}
-            {showResetMessage && (
-                <div style={{
+      {showResetMessage && (
+        <div style={{
                     position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
                     padding: '10px 20px', backgroundColor: 'rgba(255, 0, 0, 0.7)', color: 'white',
                     borderRadius: '5px', zIndex: 1000, pointerEvents: 'none'
-                }}>
-                    SPLASH! You hit the water!
-                </div>
-            )}
+        }}>
+          SPLASH! You hit the water!
         </div>
-    );
+      )}
+    </div>
+  );
 };
 
 export default GameCanvas;

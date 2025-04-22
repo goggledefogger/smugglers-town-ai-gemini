@@ -67,9 +67,11 @@ export class ArenaRoom extends Room<ArenaState> {
 
   onJoin (client: Client, options: any) {
     console.log(`[${client.sessionId}] Client joining... Options:`, options);
-
     const tabId = options?.persistentPlayerId;
+
+    console.log(`[${client.sessionId}] Calling determinePlayerTeam with tabId: ${tabId}`);
     let assignedTeam = this.determinePlayerTeam(client.sessionId, tabId);
+    console.log(`[${client.sessionId}] determinePlayerTeam returned: ${assignedTeam}. Proceeding to create player.`);
 
     // Create and setup human player
     const humanPlayer = this.createHumanPlayer(client.sessionId, assignedTeam);
@@ -80,10 +82,18 @@ export class ArenaRoom extends Room<ArenaState> {
     console.log(`=> Player ${humanPlayer.name} (${humanPlayer.team}) added at (${humanPlayer.x.toFixed(1)}, ${humanPlayer.y.toFixed(1)}) meters.`);
   }
 
-  onLeave (client: Client, consented: boolean) {
+  async onLeave (client: Client, consented: boolean) {
     console.log(`[${client.sessionId}] Client leaving... Consented: ${consented}`);
 
     const leavingPlayer = this.state.players.get(client.sessionId);
+    let leavingTabId: string | undefined = undefined;
+    for (const [pid, sid] of this.persistentIdToSessionId.entries()) {
+        if (sid === client.sessionId) {
+            leavingTabId = pid;
+            break;
+        }
+    }
+    console.log(`[${client.sessionId}] Preparing to clean up persistence. Found associated TabId: ${leavingTabId ?? 'None'}. Current team mapping for this TabId: ${leavingTabId ? this.persistentIdToTeam.get(leavingTabId) : 'N/A'}`);
 
     // Handle item drop if player was carrying ANY item
     this.state.items.forEach(item => {
@@ -98,6 +108,36 @@ export class ArenaRoom extends Room<ArenaState> {
         }
     });
 
+    // --- Enable Reconnection ---
+    try {
+      if (consented) {
+        // If leave was explicit (consented), don't allow reconnection immediately?
+        // Or maybe still allow for a short time in case of accidental close?
+        // For now, let's disallow immediate reconnection on consented leave.
+        console.log(`[${client.sessionId}] Consented leave, skipping allowReconnection.`);
+        // Explicitly remove state if not allowing reconnection
+        this.cleanupPersistentId(client.sessionId);
+        this.removePlayerState(client.sessionId);
+        this.playerRoadStatusCache.delete(client.sessionId);
+
+      } else {
+        // Allow reconnection for non-consented leaves (e.g., disconnect, refresh)
+        // Keep state for 60 seconds (adjust as needed)
+        console.log(`[${client.sessionId}] Non-consented leave. Attempting allowReconnection for 60 seconds.`);
+        await this.allowReconnection(client, 60);
+        console.log(`[${client.sessionId}] Client state preserved for reconnection.`);
+        // *** DO NOT clean up state here - Colyseus handles it if reconnection times out ***
+      }
+    } catch (e) {
+      console.error(`[${client.sessionId}] Error during allowReconnection/cleanup:`, e);
+      // Fallback cleanup if allowReconnection fails?
+      this.cleanupPersistentId(client.sessionId);
+      this.removePlayerState(client.sessionId);
+      this.playerRoadStatusCache.delete(client.sessionId);
+    }
+    // ---------------------------
+
+    /* --- OLD Cleanup Logic (Moved/Removed) ---
     // Clean up persistent ID mapping
     this.cleanupPersistentId(client.sessionId);
 
@@ -107,8 +147,9 @@ export class ArenaRoom extends Room<ArenaState> {
     // Remove player from road cache on leave
     this.playerRoadStatusCache.delete(client.sessionId);
     console.log(`[${client.sessionId}] Removed from road status cache.`);
+    */
 
-    // Check if AI needs removal
+    // Check if AI needs removal (This should still happen regardless of reconnection)
     this.checkAndRemoveAI();
 
     updateCarriedItemPosition(this.state);
@@ -259,27 +300,62 @@ export class ArenaRoom extends Room<ArenaState> {
   // --- Helper Methods ---
 
   private determinePlayerTeam(sessionId: string, tabId: string | undefined): "Red" | "Blue" {
+    console.log(`---> [determinePlayerTeam Input] sessionId: ${sessionId}, tabId: ${tabId}`);
     if (!tabId) {
         console.warn(`[${sessionId}] Client joined without tabId! Assigning team based on balance.`);
-        return this.assignTeamByBalance();
+        const team = this.assignTeamByBalance();
+        console.log(`---> [determinePlayerTeam Decision] No tabId. Assigned by balance: ${team}`);
+        return team;
     } else {
-        // Check if this TabId is already associated with an *active* session
         const existingSessionId = this.persistentIdToSessionId.get(tabId);
-        if (existingSessionId && this.clients.some(c => c.sessionId === existingSessionId)) {
-             console.warn(`[${sessionId}] TabId (${tabId}) is already active with session ${existingSessionId}. Treating as new connection, assigning team by balance.`);
-             // If active, something is wrong (duplicate tab?), force re-balance
-             const assignedTeam = this.assignTeamByBalance();
-             // Update maps for the *new* session
-             this.persistentIdToTeam.set(tabId, assignedTeam); // Overwrite/update team for this tabId
-             this.persistentIdToSessionId.set(tabId, sessionId); // Assign new session to this tabId
-             console.log(`[${sessionId}] Overwrote/Stored team assignment (${assignedTeam}) for conflicting TabId: ${tabId}`);
-             return assignedTeam;
+        console.log(`---> [determinePlayerTeam Check 1] Check persistentIdToSessionId for tabId (${tabId}). Result: ${existingSessionId ?? 'Not found'}`);
+
+        if (existingSessionId) {
+            // Found an existing session mapping for this tabId
+            const isStillActive = this.clients.some(c => c.sessionId === existingSessionId);
+            console.log(`---> [determinePlayerTeam Check 2] Is existing session ${existingSessionId} still active? ${isStillActive}`);
+
+            if (isStillActive) {
+                // *** REVISED LOGIC for active conflict ***
+                // Assume the new connection is the valid one for this tabId, replacing the old.
+                console.warn(`[${sessionId}] TabId (${tabId}) is associated with session ${existingSessionId} which appears active. Replacing mapping with new session ${sessionId}.`);
+
+                // Attempt to disconnect the old client gracefully
+                const oldClient = this.clients.find(c => c.sessionId === existingSessionId);
+                if (oldClient) {
+                    console.log(`---> Attempting to disconnect conflicting session ${existingSessionId}...`);
+                    oldClient.leave(); // Ask the old client connection to leave
+                }
+
+                // Retrieve the ORIGINAL team associated with this tabId
+                const assignedTeam = this.persistentIdToTeam.get(tabId) ?? this.assignTeamByBalance(); // Fallback if team somehow missing
+                if (!this.persistentIdToTeam.has(tabId)){
+                    console.warn(`[${sessionId}] Team mapping missing for apparently active TabId ${tabId}! Assigning by balance.`);
+                }
+
+                // Update mapping to the NEW session
+                this.persistentIdToSessionId.set(tabId, sessionId);
+                this.persistentIdToTeam.set(tabId, assignedTeam); // Ensure team map is also correct
+
+                console.log(`---> [determinePlayerTeam Decision] Replaced conflicting session mapping. Assigning original/fallback team: ${assignedTeam}. Updated persistentIdToSessionId.`);
+                return assignedTeam;
+
+            } else {
+                // Not active: Session disconnected, state might be held by allowReconnection (or timed out)
+                const assignedTeam = this.persistentIdToTeam.get(tabId)!; // Should exist if session map existed
+                console.log(`[${sessionId}] Found disconnected session mapping for TabId ${tabId}. Rejoining team: ${assignedTeam}`);
+                this.persistentIdToSessionId.set(tabId, sessionId); // Update mapping to the new session
+                console.log(`---> [determinePlayerTeam Decision] Reconnecting to existing team ${assignedTeam} for tabId (${tabId}). Updated persistentIdToSessionId.`);
+                return assignedTeam;
+            }
         }
-        // Original logic: Check if we remember the team for this TabId from a previous session
+        // --- No existing session mapping found ---
         else if (this.persistentIdToTeam.has(tabId)) {
+            // Session mapping gone (leave cleanup or timeout), but team mapping remains.
             const assignedTeam = this.persistentIdToTeam.get(tabId)!;
-            console.log(`[${sessionId}] Returning tab session detected (TabId: ${tabId}). Rejoining team: ${assignedTeam}`);
-            this.persistentIdToSessionId.set(tabId, sessionId); // Update mapping (this TabId is now associated with this session)
+            console.log(`[${sessionId}] Session mapping missing, but found team mapping for TabId ${tabId}. Rejoining team: ${assignedTeam}`);
+            this.persistentIdToSessionId.set(tabId, sessionId); // Establish new session mapping
+            console.log(`---> [determinePlayerTeam Decision] Rejoining remembered team ${assignedTeam} for tabId (${tabId}). Created persistentIdToSessionId.`);
             return assignedTeam;
         } else {
             // New TabId, assign by balance
@@ -288,6 +364,7 @@ export class ArenaRoom extends Room<ArenaState> {
             this.persistentIdToTeam.set(tabId, assignedTeam);
             this.persistentIdToSessionId.set(tabId, sessionId); // Set mapping
             console.log(`[${sessionId}] Stored team assignment (${assignedTeam}) for new TabId: ${tabId}`);
+            console.log(`---> [determinePlayerTeam Decision] New tabId (${tabId}). Assigned by balance: ${assignedTeam}. Stored mappings.`);
             return assignedTeam;
         }
     }
@@ -332,18 +409,23 @@ export class ArenaRoom extends Room<ArenaState> {
   }
 
   private cleanupPersistentId(sessionId: string): void {
+    console.log(`---> [cleanupPersistentId Input] sessionId: ${sessionId}`);
     let tabId: string | undefined = undefined;
     for (const [pid, sid] of this.persistentIdToSessionId.entries()) {
         if (sid === sessionId) {
             tabId = pid;
+            console.log(`---> [cleanupPersistentId Check] Found matching tabId: ${tabId} for sessionId: ${sessionId}`);
             break;
         }
     }
     if (tabId) {
         this.persistentIdToSessionId.delete(tabId);
+        // Note: We intentionally *keep* the persistentIdToTeam mapping here!
         console.log(`[${sessionId}] Removed sessionId mapping for TabId: ${tabId}. Team assignment (${this.persistentIdToTeam.get(tabId)}) kept.`);
+        console.log(`---> [cleanupPersistentId Action] Deleted tabId (${tabId}) from persistentIdToSessionId map.`);
     } else {
         console.warn(`[${sessionId}] Could not find TabId for leaving client.`);
+        console.log(`---> [cleanupPersistentId Action] No tabId found for sessionId ${sessionId}. No action taken.`);
     }
   }
 

@@ -4,7 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Adjust path as needed
 
 const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_ENDPOINT || 'ws://localhost:2567';
-const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId';
+const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId'; // REVERTED KEY - Using sessionStorage
+// const PERSISTENT_PLAYER_ID_KEY = 'smugglersTown_persistentPlayerId'; // Removed localStorage key
 
 interface ColyseusState {
     room: Room<ArenaState> | null;
@@ -37,22 +38,26 @@ export function useColyseus() {
     const connect = useCallback(async () => {
         if (roomRef.current || !isMounted.current) return;
 
-        // Get/Set Session Tab ID
+        // Get/Set Session Tab ID using sessionStorage (Reverted)
         let tabId = sessionStorage.getItem(SESSION_TAB_ID_KEY);
         if (!tabId) {
             tabId = uuidv4();
             sessionStorage.setItem(SESSION_TAB_ID_KEY, tabId);
+            console.log(`[useColyseus] Generated NEW Session Tab ID: ${tabId}`);
+        } else {
+            console.log(`[useColyseus] Retrieved EXISTING Session Tab ID: ${tabId}`);
         }
 
         console.log(`Attempting to connect to Colyseus server at ${COLYSEUS_ENDPOINT}...`);
         colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
 
         try {
+            // Pass the tabId to the server as persistentPlayerId (Reverted)
             const joinOptions = { persistentPlayerId: tabId };
             const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', joinOptions);
             roomRef.current = room; // Store room instance in ref
 
-            console.log(`Joined room: ${room.id}, Session ID: ${room.sessionId}`);
+            console.log(`[useColyseus] Joined room: ${room.id}, Received Session ID: ${room.sessionId}, Sent Tab ID: ${tabId}`); // Reverted log message
 
             setState(prevState => ({
                 ...prevState,
@@ -68,6 +73,15 @@ export function useColyseus() {
                 // console.log("[useColyseus] State change received"); // DEBUG
                 // Calculate scored items count
                 const scoredCount = newState.items.filter(item => item.status === 'scored').length;
+
+                // *** DEBUG LOGGING START ***
+                // FIX: Use roomRef.current.sessionId directly as state.sessionId might not be updated yet.
+                const currentSessionId = roomRef.current?.sessionId;
+                const playerInfo = currentSessionId ? newState.players.get(currentSessionId) : undefined;
+                console.log(`[useColyseus] onStateChange: My Session ID = ${currentSessionId ?? 'N/A'}, Received Team = ${playerInfo?.team ?? 'N/A'}, Player Exists = ${!!playerInfo}`);
+                // Log all players for context (can be noisy)
+                // console.log('[useColyseus] All Players in State:', Object.fromEntries(newState.players.entries()));
+                // *** DEBUG LOGGING END ***
 
                 setState(prevState => ({
                     ...prevState,

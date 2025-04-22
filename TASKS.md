@@ -56,6 +56,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 - [ ] Implement 'hot-swap' refresh (immediate replacement of old player instance)
 - [ ] Add different car types (visuals + performance: e.g., fast/drifty vs slow/grippy)
+- [ ] Address Colyseus deprecation warning (move server options to WebSocketTransport)
 
 ## Implementation Plan
 

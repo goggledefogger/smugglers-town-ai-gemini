@@ -1,5 +1,6 @@
-import { useRef, useEffect } from 'react';
-import maplibregl, { Map, LngLat } from 'maplibre-gl';
+import React, { useEffect, useRef } from 'react';
+import { Map } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 const MAP_STYLE_URL = import.meta.env.VITE_MAPLIBRE_STYLE_URL;
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)

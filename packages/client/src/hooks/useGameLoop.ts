@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
-import { Room } from 'colyseus.js';
-import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
+import { Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo } from '../utils/coordinateUtils'; // TODO: Move this to shared-utils?
 import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar

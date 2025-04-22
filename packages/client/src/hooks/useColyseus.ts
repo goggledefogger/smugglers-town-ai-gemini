@@ -107,9 +107,9 @@ export function useColyseus() {
                  // For now, just logging it here.
             });
 
-            room.onMessage('debug_steal_check_positions', (message) => {
-                // console.log('[useColyseus] Received debug_steal_check_positions:', message);
-                // Handle the specific message payload here if needed
+            room.onMessage('debug_steal_check_positions', (_message) => {
+                // TODO: Implement visualization for debugging steal checks
+                // console.log("Debug Steal Check Positions:", message);
             });
 
             room.onMessage('flag_scored', (message) => {

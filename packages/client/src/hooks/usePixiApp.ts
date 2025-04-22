@@ -2,11 +2,9 @@ import { useRef, useEffect } from 'react';
 import * as PIXI from 'pixi.js';
 import goldenToiletUrl from '/assets/golden-toilet.svg'; // Adjust path as needed
 
-// Constants from GameCanvas (consider moving to a shared config)
+// Constants (Consider moving shared ones)
 const CAR_WIDTH = 10;
 const CAR_HEIGHT = 20;
-const SERVER_BASE_DISTANCE = 80;
-const SERVER_Y_OFFSET = 0;
 
 interface UsePixiAppProps {
     pixiContainerRef: React.RefObject<HTMLDivElement>;
@@ -94,7 +92,6 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
                 }
 
                 // Create Base Sprites
-                const baseAlpha = 0.3;
                 const redBaseGfx = new PIXI.Graphics();
                 redBaseGfx.pivot.set(0, 0); redBaseGfx.x = -2000; redBaseGfx.y = -2000; redBaseGfx.visible = false;
                 app.stage.addChild(redBaseGfx);

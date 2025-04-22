@@ -20,7 +20,7 @@ export const ROAD_SPEED_MULTIPLIER = 3; // Speed on roads is half of base speed 
 // export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for stealing check) - MOVED TO SHARED-UTILS
 export const PICKUP_RADIUS_SQ = 4 * 4; // meters^2 (Keep this larger for easier pickup)
 export const BASE_RADIUS_SQ = 30 * 30; // meters^2 (Should match client VISUAL_BASE_RADIUS^2)
-export const STEAL_COOLDOWN_MS = 3000; // 3 seconds
+export const STEAL_COOLDOWN_MS = 500; // 0.5 seconds
 
 // Spawn Area
 export const ITEM_SPAWN_RADIUS = 50; // meters - Radius around origin for item spawns

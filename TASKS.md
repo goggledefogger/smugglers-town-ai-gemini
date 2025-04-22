@@ -26,7 +26,6 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implement correct team assignment and client-side color display
 - [x] Refine server-side movement physics (acceleration, friction, turning) - Added basic drag
 - [x] Add game state elements (scores, generic items/flags) to `ArenaState`
-- [x] Resolve initial sprite positioning/synchronization issues on client refresh
 - [x] Implement server-side collision detection (player-item, player-player, player-base)
 - [x] Implement core game logic (single generic item pickup, player-player item stealing, scoring at own base)
 - [x] Add simple AI opponents (server-side) (Basic targeting & movement)
@@ -34,24 +33,21 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implement manual AI spawning via client message (`add_ai`)
 - [x] Add basic UI buttons for triggering AI spawn
 - [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
-- [x] Investigate and fix team persistence / orphan car bug on refresh (including base collision timing issues)
-- [x] Modify item transfer logic: Allow transfer on collision between teammates (not just opponents)
 - [x] Modify scoring: Make Red/Blue scores persistent totals across rounds
 - [x] Restructure project into packages (client, server, shared-utils, shared-schemas)
 - [x] Create shared utility package (`@smugglers-town/shared-utils`)
-- [x] Move shared constants (Base positions, Coordinates, etc.) to `shared-utils`
-- [x] Move shared helper functions (`lerp`, `angleLerp`, `distSq`) to `shared-utils`
 - [x] Update client and server to import from shared packages
-- [x] Fix path alias and build issues related to shared packages
-- [x] Move remaining client coordinate utilities (`worldToGeo`, etc.) to `shared-utils`
 - [x] Implement multiple simultaneous items with random spawn locations within defined area
+- [x] Implement basic server-side player collision physics (impulse response)
+- [x] Configure root dev script for automatic shared package builds (concurrently)
+- [x] Tune collision radius for better feel (set to 1.5m)
+- [x] Allow item transfer on collision between teammates (removed team check)
 
 ## In Progress Tasks
 
-- [ ] Refine player/item sprite graphics/animations
-
 ## Future Tasks
 
+- [ ] Refine player/item sprite graphics/animations
 - [ ] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)
@@ -77,15 +73,16 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules).
 - ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
 - ✅ `server/src/game/playerController.ts`: Handles human player movement logic.
-- ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing).
-- ✅ `server/src/config/constants.ts`: Defines server-specific game constants.
+- ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing) **and player collision physics/transfers**.
+- ✅ `server/src/config/constants.ts`: Defines server-specific game constants **(impulse magnitude, steal cooldown)**.
 - ✅ `server/src/utils/...`: Server-specific utility functions.
 - ✅ `packages/shared-schemas/src/index.ts`: Exports the shared state structure (`Player`, `FlagState`, `ArenaState`) defined using `@colyseus/schema`.
-- ✅ `packages/shared-utils/src/index.ts`: Exports shared constants and utility functions.
+- ✅ `packages/shared-utils/src/index.ts`: Exports shared constants **(player radius)** and utility functions.
 - ✅ `server/src/index.ts`: Entry point for the Colyseus server setup.
 - ✅ `client/src/main.tsx`: Entry point for the React client application.
-- ✅ `package.json` (in root and packages): Project dependencies and scripts.
+- ✅ `package.json` (in root **and packages**): Project dependencies and scripts **(root includes concurrently setup)**.
 - ✅ `tsconfig.json` (in root and packages): TypeScript configurations.
 - ✅ `pnpm-workspace.yaml`: Defines PNPM workspaces.
 - ✅ `.env`: Environment variables (e.g., `VITE_MAPLIBRE_STYLE_URL`).
+- ✅ `.gitignore`: **Includes build artifacts like .tsbuildinfo.**
 - ✅ `TASKS.md`: This file.

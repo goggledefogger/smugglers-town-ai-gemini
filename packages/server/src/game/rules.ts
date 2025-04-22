@@ -209,9 +209,12 @@ export function checkPlayerCollisionsAndStealing(
                 let stealerId: string | undefined = undefined;
                 let carriedItem: FlagState | undefined = undefined;
 
-                // Check if p1 is carrying an item stealable by p2 (opponent team)
+                // Check if p1 is carrying an item stealable by p2
                 for (const item of state.items) {
-                    if (item.status === 'carried' && item.carrierId === p1Id && p2.team !== p1.team && currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+                    if (item.status === 'carried' &&
+                        item.carrierId === p1Id &&
+                        currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS)
+                    {
                         carrier = p1;
                         carrierId = p1Id;
                         stealer = p2;
@@ -221,10 +224,13 @@ export function checkPlayerCollisionsAndStealing(
                     }
                 }
 
-                // Check if p2 is carrying an item stealable by p1 (opponent team, if not already found)
+                // Check if p2 is carrying an item stealable by p1 (if not already found)
                 if (!carriedItem) {
                     for (const item of state.items) {
-                        if (item.status === 'carried' && item.carrierId === p2Id && p1.team !== p2.team && currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+                        if (item.status === 'carried' &&
+                            item.carrierId === p2Id &&
+                            currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS)
+                        {
                             carrier = p2;
                             carrierId = p2Id;
                             stealer = p1;

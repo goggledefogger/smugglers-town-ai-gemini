@@ -483,10 +483,6 @@ export class ArenaRoom extends Room<ArenaState> {
 
   private resetRound(): void {
     console.log("Executing resetRound...");
-    // Reset scores
-    this.state.redScore = 0;
-    this.state.blueScore = 0;
-    console.log(` -> Scores reset: Red=${this.state.redScore}, Blue=${this.state.blueScore}`);
 
     // Clear existing items from state AND refs
     this.state.items.clear();
@@ -497,9 +493,7 @@ export class ArenaRoom extends Room<ArenaState> {
         const newItemId = `item-${i}`;
         const newItem = this.spawnNewItem(newItemId);
         this.state.items.push(newItem);
-        console.log(` -> Spawned item ${newItem.id} at (${newItem.x.toFixed(1)}, ${newItem.y.toFixed(1)})`);
     }
-    console.log(`Finished resetRound. Total items: ${this.state.items.length}`);
   }
 }
 

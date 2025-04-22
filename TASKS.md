@@ -36,6 +36,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
 - [x] Investigate and fix team persistence / orphan car bug on refresh (including base collision timing issues)
 - [x] Modify item transfer logic: Allow transfer on collision between teammates (not just opponents)
+- [x] Modify scoring: Make Red/Blue scores persistent totals across rounds
 
 ## In Progress Tasks
 
@@ -60,6 +61,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [ ] Address `npm audit` vulnerabilities
 - [ ] Implement Client-Side Prediction (CSP) for improved responsiveness
 - [ ] Implement 'hot-swap' refresh (immediate replacement of old player instance)
+- [ ] Add different car types (visuals + performance: e.g., fast/drifty vs slow/grippy)
 
 ## Implementation Plan
 

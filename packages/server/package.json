@@ -13,6 +13,7 @@
     "node": "20"
   },
   "dependencies": {
+    "@smugglers-town/shared-schemas": "workspace:*",
     "@colyseus/core": "^0.15.0",
     "@colyseus/monitor": "^0.15.0",
     "@colyseus/schema": "^2.0.0",

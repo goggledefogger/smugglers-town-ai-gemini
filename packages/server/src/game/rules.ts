@@ -4,7 +4,7 @@
  * Core game rule logic (item pickup, scoring, stealing).
  */
 
-import { ArenaState, Player, FlagState } from "../schemas/ArenaState";
+import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
 import { distSq } from "../utils/helpers";
 import {
     PICKUP_RADIUS_SQ,
@@ -197,7 +197,7 @@ export function checkStealing(
  * Updates the visual position of the item if it's carried.
  */
 export function updateCarriedItemPosition(state: ArenaState): void {
-    state.items.forEach(item => {
+    state.items.forEach((item: FlagState) => {
         if (item.status !== 'carried' || !item.carrierId) {
             return; // Skip if not carried
         }

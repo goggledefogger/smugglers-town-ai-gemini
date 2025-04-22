@@ -4,7 +4,7 @@
  * Logic for updating human player state based on input.
  */
 
-import { Player } from "../schemas/ArenaState";
+import { Player } from "@smugglers-town/shared-schemas";
 import { lerp, angleLerp, isPointInRectangle } from "../utils/helpers";
 import {
     MAX_SPEED,

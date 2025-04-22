@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
-import maplibregl, { Map as MapLibreMap, LngLat } from 'maplibre-gl'; // Alias Map import
-import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Adjust path
+import { Room } from 'colyseus.js';
+import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
+import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo } from '../utils/coordinateUtils'; // Adjust path
 import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar
 

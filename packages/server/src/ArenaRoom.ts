@@ -1,5 +1,5 @@
 import { Room, Client } from "@colyseus/core";
-import { ArenaState, Player, FlagState } from "./schemas/ArenaState";
+import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
 import { v4 as uuidv4 } from 'uuid';
 
 // Import constants, helpers, and controllers

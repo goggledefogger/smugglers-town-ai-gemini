@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Client, Room } from 'colyseus.js';
 import { v4 as uuidv4 } from 'uuid';
-import { ArenaState, Player, FlagState } from '../schemas/ArenaState'; // Adjust path as needed
+import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 
 const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_ENDPOINT || 'ws://localhost:2567';
 const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId'; // REVERTED KEY - Using sessionStorage
@@ -85,7 +85,7 @@ export function useColyseus() {
                  if (!isMounted.current) return;
                 // console.log("[useColyseus] State change received"); // DEBUG
                 // Calculate scored items count
-                const scoredCount = newState.items.filter(item => item.status === 'scored').length;
+                const scoredCount = newState.items.filter((item: FlagState) => item.status === 'scored').length;
 
                 setState(prevState => ({
                     ...prevState,

@@ -4,7 +4,8 @@
  * Logic for updating AI player state (targeting and movement).
  */
 
-import { ArenaState, Player, FlagState } from "../schemas/ArenaState";
+// import { calculateAngle } from "../utils/helpers"; // REMOVED - Incorrect import
+import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
 import { lerp, angleLerp } from "../utils/helpers";
 import {
     MAX_SPEED,
@@ -15,7 +16,10 @@ import {
     AI_ACCEL_MULTIPLIER,
     ROAD_SPEED_MULTIPLIER,
     RED_BASE_POS,
-    BLUE_BASE_POS
+    BLUE_BASE_POS,
+    // AI_TARGET_REFRESH_INTERVAL, // REMOVED - Incorrect import
+    // AI_COLLISION_THRESHOLD_SQ, // REMOVED - Incorrect import
+    BASE_RADIUS_SQ
 } from "../config/constants";
 
 // Helper function to calculate squared distance
@@ -50,7 +54,7 @@ export function updateAIState(
     let minDistanceSq = Infinity;
 
     // Check if AI is carrying any item
-    const carriedItem = state.items.find(item => item.carrierId === sessionId);
+    const carriedItem = state.items.find((item: FlagState) => item.carrierId === sessionId);
 
     if (carriedItem) {
         // AI has an item, target its own base
@@ -58,7 +62,7 @@ export function updateAIState(
         targetFound = true;
     } else {
         // Find nearest available/dropped item
-        state.items.forEach(item => {
+        state.items.forEach((item: FlagState) => {
             if (item.status === 'available' || item.status === 'dropped') {
                 const dSq = distSq(aiPlayer.x, aiPlayer.y, item.x, item.y);
                 if (dSq < minDistanceSq) {
@@ -72,7 +76,7 @@ export function updateAIState(
         // If no available item found, find nearest opponent carrier
         if (!targetFound) {
             minDistanceSq = Infinity; // Reset min distance for carrier search
-            state.items.forEach(item => {
+            state.items.forEach((item: FlagState) => {
                 if (item.status === 'carried' && item.carrierId) {
                     const carrier = state.players.get(item.carrierId);
                     if (carrier && carrier.team !== aiPlayer.team) {

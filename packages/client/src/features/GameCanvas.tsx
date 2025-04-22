@@ -6,7 +6,7 @@ import { Client, Room } from 'colyseus.js'; // Re-enabled
 import { v4 as uuidv4 } from 'uuid'; // Import uuid
 import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
-import { Player, ArenaState, FlagState } from "../schemas/ArenaState"; // <-- Remove ZoneState import
+import { Player, ArenaState, FlagState } from "@smugglers-town/shared-schemas"; // <-- Remove ZoneState import
 import goldenToiletUrl from '/assets/golden-toilet.svg'; // <-- Import the SVG
 import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, ORIGIN_LNG } from '../utils/coordinateUtils'; // Corrected path to assumed utils dir
 

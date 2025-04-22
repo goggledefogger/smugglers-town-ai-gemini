@@ -5,7 +5,7 @@ import './index.css' // Make sure global CSS with Tailwind directives is importe
 // import './index.css' // Optional: Add a global CSS file later
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <App />
-  </React.StrictMode>,
+  // </React.StrictMode>,
 )

@@ -34,9 +34,22 @@ export function useColyseus() {
     const isMounted = useRef(false);
     const colyseusClient = useRef<Client | null>(null);
     const roomRef = useRef<Room<ArenaState> | null>(null); // Separate ref for stable room instance
+    const connectionAttempted = useRef(false); // Flag to prevent multiple connection attempts
 
     const connect = useCallback(async () => {
-        if (roomRef.current || !isMounted.current) return;
+        console.log("---> [useColyseus connect ENTERED]"); // Log entry
+        // Prevent multiple concurrent calls
+        if (connectionAttempted.current) {
+            console.log("---> [useColyseus connect] Already attempting connection, skipping.");
+            return;
+        }
+        connectionAttempted.current = true;
+
+        if (roomRef.current || !isMounted.current) {
+            console.log("---> [useColyseus connect] Room exists or component unmounted, skipping.");
+            connectionAttempted.current = false; // Reset flag if skipping
+            return;
+        }
 
         // Get/Set Session Tab ID using sessionStorage (Reverted)
         let tabId = sessionStorage.getItem(SESSION_TAB_ID_KEY);
@@ -150,6 +163,12 @@ export function useColyseus() {
                 error: e.message || "Failed to connect",
                 itemsScoredCount: 0, // Reset derived state
             }));
+        } finally {
+            console.log("---> [useColyseus connect EXITING]"); // Log exit
+            // Reset flag only if connection failed? Or always?
+            // Let's reset always for now to allow retries if needed,
+            // but this might need adjustment if retries cause issues.
+            connectionAttempted.current = false;
         }
     }, []); // No dependencies, relies on refs
 
@@ -179,6 +198,9 @@ export function useColyseus() {
 
     useEffect(() => {
         isMounted.current = true;
+        console.log("---> [useColyseus useEffect Mount] Attempting initial connect.");
+        // Reset flag on mount, just in case
+        connectionAttempted.current = false;
         connect(); // Attempt connection on mount
 
         return () => {

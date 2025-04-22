@@ -43,6 +43,7 @@ export class ArenaRoom extends Room<ArenaState> {
   // Counter for AI IDs (keep state within the room instance)
   private aiCounter = 1;
   private playerRoadStatusCache = new Map<string, RoadStatus>(); // <-- Add road status cache
+  private periodicLogTimer = 0; // <-- Timer for periodic logging
 
   // --- Lifecycle Methods ---
 
@@ -95,6 +96,10 @@ export class ArenaRoom extends Room<ArenaState> {
     }
     console.log(`[${client.sessionId}] Preparing to clean up persistence. Found associated TabId: ${leavingTabId ?? 'None'}. Current team mapping for this TabId: ${leavingTabId ? this.persistentIdToTeam.get(leavingTabId) : 'N/A'}`);
 
+    // ---> Log current players before leave logic
+    console.log(`---> [onLeave Pre-Reconnection Check] Players in state: ${JSON.stringify(Array.from(this.state.players.keys()))}`);
+    // --->
+
     // Handle item drop if player was carrying ANY item
     this.state.items.forEach(item => {
         if (item.carrierId === client.sessionId) {
@@ -122,15 +127,16 @@ export class ArenaRoom extends Room<ArenaState> {
 
       } else {
         // Allow reconnection for non-consented leaves (e.g., disconnect, refresh)
-        // Keep state for 60 seconds (adjust as needed)
-        console.log(`[${client.sessionId}] Non-consented leave. Attempting allowReconnection for 60 seconds.`);
-        await this.allowReconnection(client, 60);
-        console.log(`[${client.sessionId}] Client state preserved for reconnection.`);
+        // Keep state for 5 seconds (adjust as needed)
+        console.log(`[${client.sessionId}] Non-consented leave. Attempting allowReconnection for 5 seconds.`);
+        await this.allowReconnection(client, 5);
+        console.log(`---> [onLeave] State potentially preserved for ${client.sessionId}. Player should be removed by Colyseus after timeout if no reconnect.`); // Log after await
         // *** DO NOT clean up state here - Colyseus handles it if reconnection times out ***
       }
     } catch (e) {
       console.error(`[${client.sessionId}] Error during allowReconnection/cleanup:`, e);
-      // Fallback cleanup if allowReconnection fails?
+      console.log(`---> [onLeave Catch Block] Cleaning up state for ${client.sessionId} due to error or potential timeout.`);
+      // Force cleanup if allowReconnection failed or didn't complete as expected.
       this.cleanupPersistentId(client.sessionId);
       this.removePlayerState(client.sessionId);
       this.playerRoadStatusCache.delete(client.sessionId);
@@ -163,6 +169,15 @@ export class ArenaRoom extends Room<ArenaState> {
   // --- Game Loop ---
 
   update(dt: number) {
+    // --- Periodic Logging ---
+    this.periodicLogTimer += dt;
+    if (this.periodicLogTimer >= 10) { // Log approx every 10 seconds
+      this.periodicLogTimer = 0; // Reset timer
+      const playerSessionIds = Array.from(this.state.players.keys());
+      console.log(`---> [Periodic Player Check] Player Count: ${playerSessionIds.length}, Session IDs: ${JSON.stringify(playerSessionIds)}`);
+    }
+    // -----------------------
+
     if (dt > 0.1) {
         console.warn(`Large delta time detected: ${dt.toFixed(3)}s. Skipping frame.`);
         return;
@@ -316,28 +331,19 @@ export class ArenaRoom extends Room<ArenaState> {
             console.log(`---> [determinePlayerTeam Check 2] Is existing session ${existingSessionId} still active? ${isStillActive}`);
 
             if (isStillActive) {
-                // *** REVISED LOGIC for active conflict ***
-                // Assume the new connection is the valid one for this tabId, replacing the old.
-                console.warn(`[${sessionId}] TabId (${tabId}) is associated with session ${existingSessionId} which appears active. Replacing mapping with new session ${sessionId}.`);
-
-                // Attempt to disconnect the old client gracefully
-                const oldClient = this.clients.find(c => c.sessionId === existingSessionId);
-                if (oldClient) {
-                    console.log(`---> Attempting to disconnect conflicting session ${existingSessionId}...`);
-                    oldClient.leave(); // Ask the old client connection to leave
-                }
+                // *** REVISED LOGIC V2 for active conflict ***
+                // The tabId is mapped to a session that is still active.
+                // This might be a duplicate tab or a very fast refresh.
+                console.warn(`[${sessionId}] TabId (${tabId}) is mapped to an active session ${existingSessionId}. Prioritizing new session ${sessionId} for team assignment, but deferring map updates.`);
 
                 // Retrieve the ORIGINAL team associated with this tabId
                 const assignedTeam = this.persistentIdToTeam.get(tabId) ?? this.assignTeamByBalance(); // Fallback if team somehow missing
                 if (!this.persistentIdToTeam.has(tabId)){
                     console.warn(`[${sessionId}] Team mapping missing for apparently active TabId ${tabId}! Assigning by balance.`);
+                    this.persistentIdToTeam.set(tabId, assignedTeam); // Store fallback team mapping
                 }
 
-                // Update mapping to the NEW session
-                this.persistentIdToSessionId.set(tabId, sessionId);
-                this.persistentIdToTeam.set(tabId, assignedTeam); // Ensure team map is also correct
-
-                console.log(`---> [determinePlayerTeam Decision] Replaced conflicting session mapping. Assigning original/fallback team: ${assignedTeam}. Updated persistentIdToSessionId.`);
+                console.log(`---> [determinePlayerTeam Decision] Active conflict detected. Assigning original/fallback team: ${assignedTeam} to new session ${sessionId}. Map update deferred.`);
                 return assignedTeam;
 
             } else {
@@ -430,14 +436,15 @@ export class ArenaRoom extends Room<ArenaState> {
   }
 
   private removePlayerState(sessionId: string): void {
+    console.log(`---> [removePlayerState Entered] Attempting to remove state for sessionId: ${sessionId}`);
     const player = this.state.players.get(sessionId);
-    if (player) {
-        console.log(`=> Removing player state: ${player.name} (${sessionId})`);
-        this.state.players.delete(sessionId);
+    const deleted = this.state.players.delete(sessionId); // Store result of delete
+    if (deleted) {
+        console.log(`=> Removing player state: ${player?.name} (${sessionId})`); // Use optional chaining as player might be gone
         this.playerInputs.delete(sessionId);
         this.playerVelocities.delete(sessionId);
     } else {
-        console.warn(`=> Player state for ${sessionId} already removed?`);
+        console.warn(`---> [removePlayerState] Player state for ${sessionId} not found or already removed? Delete operation returned ${deleted}.`);
     }
   }
 

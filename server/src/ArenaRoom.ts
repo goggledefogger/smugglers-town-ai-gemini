@@ -84,7 +84,7 @@ export class ArenaRoom extends Room<ArenaState> {
   }
 
   async onLeave (client: Client, consented: boolean) {
-    console.log(`[${client.sessionId}] Client leaving... Consented: ${consented}`);
+    console.log(`[${client.sessionId}] Client leaving... Consented: ${consented} (Type: ${typeof consented})`);
 
     const leavingPlayer = this.state.players.get(client.sessionId);
     let leavingTabId: string | undefined = undefined;
@@ -100,65 +100,51 @@ export class ArenaRoom extends Room<ArenaState> {
     console.log(`---> [onLeave Pre-Reconnection Check] Players in state: ${JSON.stringify(Array.from(this.state.players.keys()))}`);
     // --->
 
-    // Handle item drop if player was carrying ANY item
-    this.state.items.forEach(item => {
-        if (item.carrierId === client.sessionId) {
-            console.log(`[${client.sessionId}] Player carrying item ${item.id} left.`);
-            item.status = 'dropped';
-            // Keep item at carrier's last known position (or close)
-            item.x = leavingPlayer?.x ?? 0;
-            item.y = leavingPlayer?.y ?? 0;
-            item.carrierId = null;
-            console.log(`   Item ${item.id} dropped at (${item.x.toFixed(1)}, ${item.y.toFixed(1)})`);
-        }
-    });
+    // Handle item drop IF player state still exists
+    if(leavingPlayer) {
+        this.state.items.forEach(item => {
+            if (item.carrierId === client.sessionId) {
+                console.log(`[${client.sessionId}] Player carrying item ${item.id} left.`);
+                item.status = 'dropped';
+                item.x = leavingPlayer.x;
+                item.y = leavingPlayer.y;
+                item.carrierId = null;
+                console.log(`   Item ${item.id} dropped at (${item.x.toFixed(1)}, ${item.y.toFixed(1)})`);
+            }
+        });
+    }
 
-    // --- Enable Reconnection ---
-    try {
-      if (consented) {
-        // If leave was explicit (consented), don't allow reconnection immediately?
-        // Or maybe still allow for a short time in case of accidental close?
-        // For now, let's disallow immediate reconnection on consented leave.
-        console.log(`[${client.sessionId}] Consented leave, skipping allowReconnection.`);
-        // Explicitly remove state if not allowing reconnection
+    // Check if AI needs removal (This should still happen)
+    this.checkAndRemoveAI();
+
+    updateCarriedItemPosition(this.state); // Update positions potentially after item drop
+
+    // --- Manual Cleanup Logic ---
+    const performCleanup = () => {
+        console.log(`---> Performing cleanup for ${client.sessionId}`);
         this.cleanupPersistentId(client.sessionId);
         this.removePlayerState(client.sessionId);
         this.playerRoadStatusCache.delete(client.sessionId);
+        // Potentially trigger AI check again after cleanup?
+        // this.checkAndRemoveAI();
+    };
 
-      } else {
-        // Allow reconnection for non-consented leaves (e.g., disconnect, refresh)
-        // Keep state for 5 seconds (adjust as needed)
-        console.log(`[${client.sessionId}] Non-consented leave. Attempting allowReconnection for 5 seconds.`);
-        await this.allowReconnection(client, 5);
-        console.log(`---> [onLeave] State potentially preserved for ${client.sessionId}. Player should be removed by Colyseus after timeout if no reconnect.`); // Log after await
-        // *** DO NOT clean up state here - Colyseus handles it if reconnection times out ***
-      }
-    } catch (e) {
-      console.error(`[${client.sessionId}] Error during allowReconnection/cleanup:`, e);
-      console.log(`---> [onLeave Catch Block] Cleaning up state for ${client.sessionId} due to error or potential timeout.`);
-      // Force cleanup if allowReconnection failed or didn't complete as expected.
-      this.cleanupPersistentId(client.sessionId);
-      this.removePlayerState(client.sessionId);
-      this.playerRoadStatusCache.delete(client.sessionId);
+    if (consented) {
+        console.log(`[${client.sessionId}] Consented leave. Performing immediate cleanup.`);
+        performCleanup();
+    } else {
+        console.log(`[${client.sessionId}] Non-consented leave. Scheduling cleanup in 5 seconds.`);
+        this.clock.setTimeout(() => {
+            // Check if player still exists (might have reconnected or been cleaned up otherwise)
+            if (this.state.players.has(client.sessionId)) {
+                 console.log(`---> 5-second timer expired for ${client.sessionId}. Player still exists. Performing cleanup.`);
+                 performCleanup();
+            } else {
+                 console.log(`---> 5-second timer expired for ${client.sessionId}. Player already gone. Skipping cleanup.`);
+            }
+        }, 5000); // 5 seconds
     }
-    // ---------------------------
-
-    /* --- OLD Cleanup Logic (Moved/Removed) ---
-    // Clean up persistent ID mapping
-    this.cleanupPersistentId(client.sessionId);
-
-    // Remove player state
-    this.removePlayerState(client.sessionId);
-
-    // Remove player from road cache on leave
-    this.playerRoadStatusCache.delete(client.sessionId);
-    console.log(`[${client.sessionId}] Removed from road status cache.`);
-    */
-
-    // Check if AI needs removal (This should still happen regardless of reconnection)
-    this.checkAndRemoveAI();
-
-    updateCarriedItemPosition(this.state);
+    // -------------------------
   }
 
   onDispose() {
@@ -332,8 +318,6 @@ export class ArenaRoom extends Room<ArenaState> {
 
             if (isStillActive) {
                 // *** REVISED LOGIC V2 for active conflict ***
-                // The tabId is mapped to a session that is still active.
-                // This might be a duplicate tab or a very fast refresh.
                 console.warn(`[${sessionId}] TabId (${tabId}) is mapped to an active session ${existingSessionId}. Prioritizing new session ${sessionId} for team assignment, but deferring map updates.`);
 
                 // Retrieve the ORIGINAL team associated with this tabId

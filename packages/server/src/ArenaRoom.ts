@@ -11,7 +11,7 @@ import { updateHumanPlayerState } from "./game/playerController";
 import {
     checkItemPickup,
     checkScoring,
-    checkStealing,
+    checkPlayerCollisionsAndStealing,
     updateCarriedItemPosition
 } from "./game/rules";
 import { worldToGeo } from "@smugglers-town/shared-utils"; // <-- Import shared coordinate utils
@@ -248,7 +248,13 @@ export class ArenaRoom extends Room<ArenaState> {
 
     // 3. Apply Game Rules (after all players have moved)
     checkItemPickup(this.state, playerIds);
-    checkScoring(this.state, playerIds); // Check scoring before stealing
+    checkScoring(this.state, playerIds);
+    checkPlayerCollisionsAndStealing(
+        this.state,
+        playerIds,
+        this.playerVelocities,
+        now
+    );
 
     // --- Add Round Reset Check HERE ---
     const allScored = this.state.items.every(item => item.status === 'scored');
@@ -257,13 +263,6 @@ export class ArenaRoom extends Room<ArenaState> {
         this.resetRound();
     }
     // ---------------------------------
-
-    // Check stealing and get potential debug data
-    const stealDebugData = checkStealing(this.state, playerIds, this.clock.currentTime);
-    if (stealDebugData) {
-        // Broadcast the positions used in the check to all clients for visualization
-        this.broadcast("debug_steal_check_positions", stealDebugData, { afterNextPatch: true });
-    }
 
     updateCarriedItemPosition(this.state);
   }

@@ -5,16 +5,18 @@
  */
 
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils";
+import { RED_BASE_POS, BLUE_BASE_POS, PLAYER_EFFECTIVE_RADIUS, PLAYER_COLLISION_RADIUS_SQ } from "@smugglers-town/shared-utils";
 import {
     PICKUP_RADIUS_SQ,
     BASE_RADIUS_SQ,
-    PLAYER_COLLISION_RADIUS_SQ,
-    PLAYER_EFFECTIVE_RADIUS,
     STEAL_COOLDOWN_MS,
-    ITEM_START_POS
+    ITEM_START_POS,
+    PHYSICS_IMPULSE_MAGNITUDE
 } from "../config/constants";
 import { distSq } from "@smugglers-town/shared-utils";
+
+// Define the velocity type locally
+type PlayerVelocity = { vx: number, vy: number };
 
 /**
  * Checks for item pickups by any player.
@@ -113,82 +115,142 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
 /**
  * Data structure for returning debug info from checkStealing
  */
-interface StealCheckDebugData {
-    carrierId: string;
-    carrierX: number;
-    carrierY: number;
-    stealerId: string;
-    stealerX: number;
-    stealerY: number;
+interface CollisionCheckDebugData {
+    p1Id: string;
+    p1X: number;
+    p1Y: number;
+    p2Id: string;
+    p2X: number;
+    p2Y: number;
 }
 
 /**
- * Checks for item stealing between opposing players.
+ * Checks for item stealing AND handles basic collision physics between players.
  * Modifies the item state if a steal occurs.
- * @returns StealCheckDebugData | null - Returns position data if a distance check was performed, null otherwise.
+ * Modifies player velocities on collision.
+ * @returns CollisionCheckDebugData | null - Returns position data if a distance check was performed, null otherwise.
  */
-export function checkStealing(
+export function checkPlayerCollisionsAndStealing(
     state: ArenaState,
     playerIds: string[],
+    playerVelocities: Map<string, PlayerVelocity>,
     currentTime: number
-): StealCheckDebugData | null {
-    let latestDebugData: StealCheckDebugData | null = null;
+): CollisionCheckDebugData | null {
+    let latestDebugData: CollisionCheckDebugData | null = null;
+    const processedPairs = new Set<string>();
 
-    // Iterate through all carried items
-    for (const item of state.items) {
-        if (item.status !== 'carried' || !item.carrierId || currentTime < item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
-            continue; // This item isn't carried or is on cooldown
-        }
+    // Iterate through all players as potential colliders
+    for (let i = 0; i < playerIds.length; i++) {
+        const p1Id = playerIds[i];
+        const p1 = state.players.get(p1Id);
+        if (!p1) continue;
 
-        const carrier = state.players.get(item.carrierId);
-        if (!carrier) {
-            // Should be handled by updateCarriedItemPosition, but drop here as a safeguard
-            console.warn(`Stealing check: Carrier ${item.carrierId} for item ${item.id} not found. Dropping item.`);
-            item.status = 'dropped';
-            item.carrierId = null;
-            continue;
-        }
+        // Check against all subsequent players
+        for (let j = i + 1; j < playerIds.length; j++) {
+            const p2Id = playerIds[j];
+            const p2 = state.players.get(p2Id);
+            if (!p2) continue;
 
-        // Check against all other players
-        for (const potentialStealerId of playerIds) {
-            if (potentialStealerId === item.carrierId) continue; // Cannot steal from self
+            // Ensure pair order consistency for the processed set
+            const pairKey = p1Id < p2Id ? `${p1Id}-${p2Id}` : `${p2Id}-${p1Id}`;
 
-            const potentialStealer = state.players.get(potentialStealerId);
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const dSq = dx * dx + dy * dy;
 
-            if (!potentialStealer /* || potentialStealer.team === carrier.team */) {
-                continue; // Skip if player doesn't exist or is on the same team
-            }
+            // Use a combined radius for collision check
+            const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
+            const collisionThresholdSq = combinedRadius * combinedRadius;
 
-            // Use player collision radius for steal check distance
-            const collisionThresholdSq = PLAYER_COLLISION_RADIUS_SQ + PLAYER_COLLISION_RADIUS_SQ; // Simple sum of radii squared
-
-            // --- Prepare Debug Data --- Capture positions used for this check
-            latestDebugData = {
-                carrierId: item.carrierId,
-                carrierX: carrier.x,
-                carrierY: carrier.y,
-                stealerId: potentialStealerId,
-                stealerX: potentialStealer.x,
-                stealerY: potentialStealer.y
+             // --- Prepare Debug Data --- Capture positions used for this check
+             latestDebugData = {
+                p1Id: p1Id,
+                p1X: p1.x,
+                p1Y: p1.y,
+                p2Id: p2Id,
+                p2X: p2.x,
+                p2Y: p2.y
             };
-            // --------------------------
+             // --------------------------
 
-            const dSq = distSq(carrier.x, carrier.y, potentialStealer.x, potentialStealer.y);
+            if (dSq > 0 && dSq <= collisionThresholdSq) {
+                // Collision detected!
 
-            if (dSq <= collisionThresholdSq) {
-                // Steal occurred!
-                console.log(`[${potentialStealerId}] Player ${potentialStealer.name} (${potentialStealer.team}) STOLE item ${item.id} from [${item.carrierId}] Player ${carrier.name} (${carrier.team})!`);
-                item.carrierId = potentialStealerId;
-                item.lastStealTimestamp = currentTime; // Set cooldown timestamp for this item
-                // Update item position to prevent visual glitches before next position update
-                item.x = NaN;
-                item.y = NaN;
-                return latestDebugData; // Return debug data for the successful steal
+                // --- Apply physics impulse --- (Only if not already processed this tick)
+                if (!processedPairs.has(pairKey)) {
+                    const dist = Math.sqrt(dSq);
+                    const nx = dx / dist;
+                    const ny = dy / dist;
+
+                    const p1Vel = playerVelocities.get(p1Id);
+                    const p2Vel = playerVelocities.get(p2Id);
+
+                    if (p1Vel && p2Vel) {
+                        // Apply impulse (equal and opposite)
+                        p1Vel.vx -= nx * PHYSICS_IMPULSE_MAGNITUDE;
+                        p1Vel.vy -= ny * PHYSICS_IMPULSE_MAGNITUDE;
+                        p2Vel.vx += nx * PHYSICS_IMPULSE_MAGNITUDE;
+                        p2Vel.vy += ny * PHYSICS_IMPULSE_MAGNITUDE;
+
+                        // Mark this pair as processed for physics this tick
+                        processedPairs.add(pairKey);
+
+                        // console.log(`Collision Detected: ${p1.name} & ${p2.name}. Impulse applied.`); // Debug log
+                    } else {
+                         console.warn(`Collision detected but velocity missing for ${p1Id} or ${p2Id}`);
+                    }
+                }
+                // -----------------------------
+
+                // --- Now check for item stealing specifically between these two colliding players ---
+                let carrier: Player | undefined = undefined;
+                let carrierId: string | undefined = undefined;
+                let stealer: Player | undefined = undefined;
+                let stealerId: string | undefined = undefined;
+                let carriedItem: FlagState | undefined = undefined;
+
+                // Check if p1 is carrying an item stealable by p2 (opponent team)
+                for (const item of state.items) {
+                    if (item.status === 'carried' && item.carrierId === p1Id && p2.team !== p1.team && currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+                        carrier = p1;
+                        carrierId = p1Id;
+                        stealer = p2;
+                        stealerId = p2Id;
+                        carriedItem = item;
+                        break;
+                    }
+                }
+
+                // Check if p2 is carrying an item stealable by p1 (opponent team, if not already found)
+                if (!carriedItem) {
+                    for (const item of state.items) {
+                        if (item.status === 'carried' && item.carrierId === p2Id && p1.team !== p2.team && currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+                            carrier = p2;
+                            carrierId = p2Id;
+                            stealer = p1;
+                            stealerId = p1Id;
+                            carriedItem = item;
+                            break;
+                        }
+                    }
+                }
+
+                // If a stealable item was found between the colliding pair
+                if (carrier && stealer && carriedItem && carrierId && stealerId) {
+                    console.log(`[${stealerId}] Player ${stealer.name} (${stealer.team}) STOLE item ${carriedItem.id} from [${carrierId}] Player ${carrier.name} (${carrier.team}) during collision!`);
+                    carriedItem.carrierId = stealerId;
+                    carriedItem.lastStealTimestamp = currentTime;
+                    carriedItem.x = NaN;
+                    carriedItem.y = NaN;
+                    // Potentially return specific steal debug data here if needed
+                    // Note: steal happens even if physics impulse was already applied this tick
+                }
+                // ------------------------------------------------------------------------------------
             }
         }
     }
 
-    // If loop completes without steal, return the debug data from the last distance check performed
+    // If loop completes without collision/steal, return the debug data from the last distance check performed (or null if no checks)
     return latestDebugData;
 }
 

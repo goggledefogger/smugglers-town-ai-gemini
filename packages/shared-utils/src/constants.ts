@@ -16,3 +16,7 @@ export const METERS_PER_DEGREE_LAT_APPROX = 111320; // Approx meters per degree 
 
 // Gameplay Constants
 export const NUM_ITEMS = 4; // Number of items to spawn each round
+
+// Player Constants
+export const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (Used for collision and client rendering)
+export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for server collision checks)

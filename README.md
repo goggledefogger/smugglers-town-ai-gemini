@@ -87,6 +87,18 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
     - Open the client URL in your web browser.
     - Open a second tab/browser to the same URL to see multiplayer functionality.
 
+> **Important Note on Shared Packages:** This project uses shared packages (`packages/shared-schemas`, `packages/shared-utils`). If you make changes to the code within these shared packages, you **must** rebuild the specific shared package *before* the changes will be reflected in the `client` or `server`. Use the following command (replace `<package-name>` with the actual package name like `@smugglers-town/shared-utils`):
+>
+> ```bash
+> pnpm --filter <package-name> build
+> ```
+>
+> For continuous development, you can run the build in watch mode in a separate terminal:
+>
+> ```bash
+> pnpm --filter <package-name> build --watch
+> ```
+
 ## Project Structure
 
 ```

@@ -14,7 +14,7 @@ import {
     checkStealing,
     updateCarriedItemPosition
 } from "./game/rules";
-import { worldToGeo } from "./utils/coordinateUtils"; // <-- Import coordinate utils
+import { worldToGeo } from "@smugglers-town/shared-utils"; // <-- Import shared coordinate utils
 import { getMapFeaturesAtPoint, responseHasRoad } from "./utils/mapApiUtils"; // <-- Import map API utils
 
 // Define types for internal room state maps

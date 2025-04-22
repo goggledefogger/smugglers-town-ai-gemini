@@ -43,12 +43,12 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Move shared helper functions (`lerp`, `angleLerp`, `distSq`) to `shared-utils`
 - [x] Update client and server to import from shared packages
 - [x] Fix path alias and build issues related to shared packages
+- [x] Move remaining client coordinate utilities (`worldToGeo`, etc.) to `shared-utils`
 
 ## In Progress Tasks
 
 - [ ] Improve HUD with game state info (score, timer✅, etc.)
 - [ ] Refine player/item sprite graphics/animations (Golden Toilet ✅ - Basic GFX added)
-- [ ] Move remaining client coordinate utilities (`worldToGeo`, etc.) to `shared-utils`
 
 ## Future Tasks
 
@@ -75,7 +75,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 The game uses a server-authoritative architecture with client-side interpolation. The client renders the game world based on state updates received from the server and sends user input.
 
 - **Server (`packages/server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop. Uses shared schemas (`@smugglers-town/shared-schemas`) for state and shared utilities (`@smugglers-town/shared-utils`) for constants/helpers. Handles player connections, input, authoritative physics calculations, collision detection, game rules, and AI control.
-- **Client (`packages/client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. Uses shared schemas (`@smugglers-town/shared-schemas`) and utilities (`@smugglers-town/shared-utils`). Converts server meter coordinates to geographic coordinates (`worldToGeo` - currently local util) for map positioning and sprite projection. Interpolates visual elements between state updates.
+- **Client (`packages/client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. Uses shared schemas (`@smugglers-town/shared-schemas`) and utilities (`@smugglers-town/shared-utils`). Converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates visual elements between state updates.
 
 ### Relevant Files
 

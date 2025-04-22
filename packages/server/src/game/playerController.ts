@@ -5,8 +5,7 @@
  */
 
 import { Player, ArenaState } from "@smugglers-town/shared-schemas";
-import { isPointInRectangle } from "../utils/helpers";
-import { lerp, angleLerp } from "@smugglers-town/shared-utils";
+import { lerp, angleLerp, isPointInRectangle } from "@smugglers-town/shared-utils";
 import {
     MAX_SPEED,
     ACCELERATION,

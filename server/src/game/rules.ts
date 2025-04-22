@@ -156,7 +156,7 @@ export function checkStealing(
 
             const potentialStealer = state.players.get(potentialStealerId);
 
-            if (!potentialStealer || potentialStealer.team === carrier.team) {
+            if (!potentialStealer /* || potentialStealer.team === carrier.team */) {
                 continue; // Skip if player doesn't exist or is on the same team
             }
 

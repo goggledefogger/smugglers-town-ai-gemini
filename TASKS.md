@@ -35,6 +35,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Add basic UI buttons for triggering AI spawn
 - [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
 - [x] Investigate and fix team persistence / orphan car bug on refresh (including base collision timing issues)
+- [x] Modify item transfer logic: Allow transfer on collision between teammates (not just opponents)
 
 ## In Progress Tasks
 

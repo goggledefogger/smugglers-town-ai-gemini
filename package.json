@@ -7,13 +7,17 @@
     "dev:server": "pnpm --filter smugglers-town-server dev",
     "dev:client": "pnpm --filter smugglers-town-client dev",
     "dev": "concurrently -n \"UTILS,SCHEMAS,SERVER,CLIENT\" -c \"auto\" \"pnpm --filter @smugglers-town/shared-utils build --watch\" \"pnpm --filter @smugglers-town/shared-schemas build --watch\" \"pnpm --filter smugglers-town-server dev\" \"pnpm --filter smugglers-town-client dev\"",
-    "build": "pnpm --filter \"./packages/**\" build"
+    "build": "pnpm --filter \"./packages/**\" build",
+    "start:prod": "concurrently -n \"SERVER,CLIENT\" -c \"auto\" \"pnpm --filter smugglers-town-server start\" \"serve -s packages/client/dist -l 3010 --no-clipboard\""
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "concurrently": "^9.1.2",
+    "serve": "^14.2.3"
+  },
   "devDependencies": {
-    "@types/uuid": "^10.0.0",
-    "concurrently": "^9.1.2"
+    "@types/uuid": "^10.0.0"
   }
 }

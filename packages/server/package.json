@@ -4,10 +4,9 @@
   "description": "Colyseus Game Server for Smuggler's Town",
   "type": "commonjs",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "node lib/index.js",
     "dev": "nodemon --watch src --ext ts --exec \"tsc && node lib/index.js\"",
-    "build": "tsc -b",
-    "start:prod": "node lib/index.js"
+    "build": "tsc -b"
   },
   "engines": {
     "node": "20"

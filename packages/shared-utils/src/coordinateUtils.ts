@@ -1,19 +1,8 @@
-/**
- * coordinateUtils.ts
- *
- * Helper functions for coordinate conversions (Server-side).
- */
-import { METERS_PER_DEGREE_LAT_APPROX } from "@smugglers-town/shared-utils"; // Import shared constant
-
-// Coordinate conversion utilities for the server
-
-// Define World Origin Constants (used for conversions)
-export const ORIGIN_LNG = -73.985;
-export const ORIGIN_LAT = 40.758;
-// export const METERS_PER_DEGREE_LAT_APPROX = 111320; // MOVED TO SHARED-UTILS
+// packages/shared-utils/src/coordinateUtils.ts
+import { ORIGIN_LNG, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX } from "./constants";
 
 /**
- * Calculates approximate meters per degree longitude at a given latitude.
+ * Helper to get meters per degree longitude at a given latitude (approximate).
  */
 export function metersPerDegreeLngApprox(latitude: number): number {
     // Ensure latitude is within valid range to avoid Math.cos issues
@@ -23,7 +12,21 @@ export function metersPerDegreeLngApprox(latitude: number): number {
 }
 
 /**
- * Converts world meters (relative to origin) back to approximate Geo coords [Lng, Lat].
+ * Convert Geo coords (Lng/Lat) to world meters relative to origin.
+ * @returns [x_meters, y_meters]
+ */
+export function geoToWorld(lng: number, lat: number): [number, number] {
+    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin latitude for approximation
+    const deltaLng = lng - ORIGIN_LNG;
+    const deltaLat = lat - ORIGIN_LAT;
+    const x_meters = deltaLng * metersPerLng;
+    const y_meters = deltaLat * METERS_PER_DEGREE_LAT_APPROX; // Use constant for latitude
+    return [x_meters, y_meters];
+}
+
+/**
+ * Convert world meters (relative to origin) back to approximate Geo coords.
+ * @returns [lng, lat]
  */
 export function worldToGeo(x_meters: number, y_meters: number): [number, number] {
     const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin lat for approximation
@@ -43,5 +46,3 @@ export function worldToGeo(x_meters: number, y_meters: number): [number, number]
     }
     return [resultLng, resultLat];
 }
-
-// Note: geoToWorld is not currently needed on the server, so it's omitted.

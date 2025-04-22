@@ -5,13 +5,12 @@ import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo } from '../utils/coordinateUtils'; // Adjust path
 import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar
+import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
 const VISUAL_BASE_RADIUS = 30;
 const CAR_HEIGHT = 20; // From usePixiApp
-const RED_BASE_POS = { x: -80, y: 0 }; // Hardcoded for now, match usePixiApp/constants
-const BLUE_BASE_POS = { x: 80, y: 0 };
 const NUM_ITEMS = 4; // From server constants
 
 interface UseGameLoopProps {

@@ -5,8 +5,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "ts-node src/index.ts",
-    "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
-    "build": "tsc",
+    "dev": "nodemon --watch src --ext ts --exec \"tsc && node lib/index.js\"",
+    "build": "tsc -b",
     "start:prod": "node lib/index.js"
   },
   "engines": {
@@ -26,6 +26,7 @@
     "@types/node": "^20.14.2",
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.2.2"
   },
   "private": true

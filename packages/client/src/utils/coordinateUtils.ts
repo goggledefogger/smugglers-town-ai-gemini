@@ -3,12 +3,13 @@
  *
  * Helper functions for coordinate conversions and interpolations.
  */
+import { ORIGIN_LNG, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX } from "@smugglers-town/shared-utils"; // Import shared constants
 
 // Define World Origin Constants (used for conversions)
-const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
-export const ORIGIN_LNG = INITIAL_CENTER[0];
-export const ORIGIN_LAT = INITIAL_CENTER[1];
-export const METERS_PER_DEGREE_LAT_APPROX = 111320; // Approx meters per degree latitude
+// const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // MOVED TO SHARED-UTILS
+// export const ORIGIN_LNG = INITIAL_CENTER[0]; // MOVED TO SHARED-UTILS
+// export const ORIGIN_LAT = INITIAL_CENTER[1]; // MOVED TO SHARED-UTILS
+// export const METERS_PER_DEGREE_LAT_APPROX = 111320; // MOVED TO SHARED-UTILS
 
 /**
  * Linear interpolation between two numbers.
@@ -32,7 +33,7 @@ export function angleLerp(startAngle: number, endAngle: number, factor: number):
 export function metersPerDegreeLngApprox(latitude: number): number {
     // Ensure latitude is within valid range to avoid Math.cos issues
     const clampedLat = Math.max(-85, Math.min(85, latitude));
-    const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180);
+    const meters = METERS_PER_DEGREE_LAT_APPROX * Math.cos(clampedLat * Math.PI / 180); // Will use imported constant later
     return meters > 1 ? meters : 1; // Avoid returning 0 or negative for extreme latitudes or edge cases
 }
 

@@ -35,10 +35,10 @@ export const ITEM_SPAWN_RADIUS = 50; // meters - Radius around origin for item s
 export const PLAYER_SPAWN_RADIUS = 10; // meters - Radius around origin for player spawns
 
 // Base Positions (Meters from Origin)
-export const BASE_DISTANCE = 80; // meters
-export const Y_OFFSET = 0; // Keep bases horizontally aligned for simplicity
-export const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET };
-export const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET };
+// export const BASE_DISTANCE = 80; // MOVED TO SHARED-UTILS
+// export const Y_OFFSET = 0; // MOVED TO SHARED-UTILS
+// export const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET }; // MOVED TO SHARED-UTILS
+// export const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET }; // MOVED TO SHARED-UTILS
 
 // Item Start Position
 export const ITEM_START_POS = { x: 0, y: 0 };

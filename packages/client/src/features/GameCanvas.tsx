@@ -8,7 +8,8 @@ import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
 import { Player, ArenaState, FlagState } from "@smugglers-town/shared-schemas"; // <-- Remove ZoneState import
 import goldenToiletUrl from '/assets/golden-toilet.svg'; // <-- Import the SVG
-import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, ORIGIN_LNG } from '../utils/coordinateUtils'; // Corrected path to assumed utils dir
+import { ORIGIN_LNG, ORIGIN_LAT, METERS_PER_DEGREE_LAT_APPROX, RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
+// import { worldToGeo, geoToWorld, lerp, angleLerp, metersPerDegreeLngApprox } from '../utils/coordinateUtils'; // REMOVED - Will import from shared-utils
 
 // Map and Style
 // Read style URL from environment variable
@@ -52,9 +53,9 @@ const SERVER_Y_OFFSET = 0; // meters
 const VISUAL_BASE_RADIUS = 30; // meters <- Should match sqrt(server BASE_RADIUS_SQ)
 // const SERVER_COLLISION_RADIUS = 38.5; // meters <- Actual collision radius from server (for debugging viz) - REMOVED
 
-// --- Base Positions (Client-side copy for rendering/UI logic) ---
-const RED_BASE_POS = { x: -SERVER_BASE_DISTANCE, y: SERVER_Y_OFFSET };
-const BLUE_BASE_POS = { x: SERVER_BASE_DISTANCE, y: -SERVER_Y_OFFSET };
+// --- Base Positions (Client-side copy for rendering/UI logic) --- MOVED TO SHARED-UTILS
+// const RED_BASE_POS = { x: -SERVER_BASE_DISTANCE, y: SERVER_Y_OFFSET };
+// const BLUE_BASE_POS = { x: SERVER_BASE_DISTANCE, y: -SERVER_Y_OFFSET };
 // ------------------------------------------------------------------
 
 // Import Hooks

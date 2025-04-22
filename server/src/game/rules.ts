@@ -4,7 +4,7 @@
  * Core game rule logic (item pickup, scoring, stealing).
  */
 
-import { ArenaState, Player } from "../schemas/ArenaState";
+import { ArenaState, Player, FlagState } from "../schemas/ArenaState";
 import { distSq } from "../utils/helpers";
 import {
     PICKUP_RADIUS_SQ,
@@ -17,38 +17,32 @@ import {
     ITEM_START_POS
 } from "../config/constants";
 
-// Helper to reset the item state (could be part of a potential ItemManager class later)
-export function resetItemState(item: ArenaState['item']) {
-    console.log(`Resetting Item to base.`);
-    item.status = 'atBase';
-    item.x = ITEM_START_POS.x;
-    item.y = ITEM_START_POS.y;
-    item.carrierId = null;
-    item.lastStealTimestamp = 0; // Reset cooldown timer
-}
-
 /**
  * Checks for item pickups by any player.
  * Modifies the item state if a pickup occurs.
  */
 export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
-    const item = state.item;
-    if (item.status !== 'atBase' && item.status !== 'dropped') {
-        return; // Item not available for pickup
-    }
-
+    // Iterate through all players first
     for (const sessionId of playerIds) {
         const player = state.players.get(sessionId);
         if (!player) continue;
 
-        const dSq = distSq(player.x, player.y, item.x, item.y);
-        if (dSq <= PICKUP_RADIUS_SQ) {
-            console.log(`[${sessionId}] Player ${player.name} picked up the item!`);
-            item.status = "carried";
-            item.carrierId = sessionId;
-            item.x = NaN; // Position is now determined by carrier
-            item.y = NaN;
-            return; // Only one player can pick up per tick
+        // Then check against each available/dropped item
+        for (const item of state.items) {
+            if (item.status !== 'available' && item.status !== 'dropped') {
+                continue; // Item not available for pickup
+            }
+
+            const dSq = distSq(player.x, player.y, item.x, item.y);
+            if (dSq <= PICKUP_RADIUS_SQ) {
+                console.log(`[${sessionId}] Player ${player.name} picked up item ${item.id}!`);
+                item.status = "carried";
+                item.carrierId = sessionId;
+                item.x = NaN; // Position is now determined by carrier
+                item.y = NaN;
+                // A player can only pick up one item per check cycle
+                return; // Exit function early after successful pickup
+            }
         }
     }
 }
@@ -58,43 +52,61 @@ export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
  * Modifies score and item state if scoring occurs.
  */
 export function checkScoring(state: ArenaState, playerIds: string[]): void {
-    const item = state.item;
-    if (item.status !== 'carried' || !item.carrierId) {
-        return; // Item not carried, no scoring possible
-    }
+    // Iterate through all items
+    for (const item of state.items) {
+        // Only check carried items
+        if (item.status !== 'carried' || !item.carrierId) {
+            continue;
+        }
 
-    const carrier = state.players.get(item.carrierId);
-    if (!carrier) {
-        console.warn(`Scoring check: Carrier ${item.carrierId} not found, resetting item.`);
-        resetItemState(item);
-        return;
-    }
+        const carrier = state.players.get(item.carrierId);
+        if (!carrier) {
+            // If carrier somehow doesn't exist, drop the item where it is (should be NaN, but safer)
+            console.warn(`Scoring check: Carrier ${item.carrierId} for item ${item.id} not found. Dropping item.`);
+            item.status = 'dropped';
+            item.carrierId = null;
+            // Attempt to get a reasonable drop position if carrier exists but is leaving
+            // If carrier truly gone, x/y might remain NaN - updateCarriedItemPosition handles this
+            continue;
+        }
 
-    let targetBasePos = null;
-    if (carrier.team === 'Red') { targetBasePos = RED_BASE_POS; }
-    else if (carrier.team === 'Blue') { targetBasePos = BLUE_BASE_POS; }
+        let targetBasePos = null;
+        let baseTeam: 'Red' | 'Blue' | null = null;
+        if (carrier.team === 'Red') {
+            targetBasePos = RED_BASE_POS;
+            baseTeam = 'Red';
+        } else if (carrier.team === 'Blue') {
+            targetBasePos = BLUE_BASE_POS;
+            baseTeam = 'Blue';
+        }
 
-    if (targetBasePos) {
-        // Calculate front position of the player
-        const angle = carrier.heading;
-        const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
-        const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
-        const frontX = carrier.x + frontOffsetX;
-        const frontY = carrier.y + frontOffsetY;
+        if (targetBasePos && baseTeam) {
+            // Calculate front position of the player
+            const angle = carrier.heading;
+            const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
+            const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
+            const frontX = carrier.x + frontOffsetX;
+            const frontY = carrier.y + frontOffsetY;
 
-        // Check distance from player's FRONT to base center
-        const dSq = distSq(frontX, frontY, targetBasePos.x, targetBasePos.y);
+            // Check distance from player's FRONT to base center
+            const dSq = distSq(frontX, frontY, targetBasePos.x, targetBasePos.y);
 
-        if (dSq <= BASE_RADIUS_SQ) {
-            console.log(`[${item.carrierId}] Player ${carrier.name} (${carrier.team}) SCORED with the item! (Front check)`);
-            // Increment score
-            if (carrier.team === 'Red') state.redScore++;
-            else state.blueScore++;
-            console.log(`Scores: Red ${state.redScore} - Blue ${state.blueScore}`);
-            // Reset the item
-            resetItemState(item);
-            // No need to check other players, item is reset
-            return;
+            if (dSq <= BASE_RADIUS_SQ) {
+                console.log(`[${item.carrierId}] Player ${carrier.name} (${carrier.team}) SCORED with item ${item.id}!`);
+
+                // Update item state to 'scored' and place it at the base
+                item.status = 'scored';
+                item.x = targetBasePos.x;
+                item.y = targetBasePos.y;
+                item.carrierId = null;
+
+                // Increment score
+                if (carrier.team === 'Red') state.redScore++;
+                else state.blueScore++;
+                console.log(`Scores: Red ${state.redScore} - Blue ${state.blueScore}`);
+
+                // Don't return early, check other items/players
+            }
         }
     }
 }
@@ -121,76 +133,91 @@ export function checkStealing(
     playerIds: string[],
     currentTime: number
 ): StealCheckDebugData | null {
-    const item = state.item;
+    let latestDebugData: StealCheckDebugData | null = null;
 
-    // Check if item is carried AND cooldown has expired
-    if (item.status !== 'carried' || !item.carrierId || currentTime < item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
-        return null;
-    }
-
-    const carrier = state.players.get(item.carrierId);
-    if (!carrier) {
-        console.warn(`Stealing check: Carrier ${item.carrierId} not found, resetting item.`);
-        resetItemState(item);
-        return null;
-    }
-
-    let debugData: StealCheckDebugData | null = null;
-
-    for (const potentialStealerId of playerIds) {
-        if (potentialStealerId === item.carrierId) continue; // Cannot steal from self
-
-        const potentialStealer = state.players.get(potentialStealerId);
-
-        if (!potentialStealer || potentialStealer.team === carrier.team) {
-            continue; // Skip if player doesn't exist or is on the same team
+    // Iterate through all carried items
+    for (const item of state.items) {
+        if (item.status !== 'carried' || !item.carrierId || currentTime < item.lastStealTimestamp + STEAL_COOLDOWN_MS) {
+            continue; // This item isn't carried or is on cooldown
         }
 
-        // New check: Use a slightly larger fixed threshold for now
-        const collisionThresholdSq = 5 * 5; // Target distance of 5 meters (squared)
+        const carrier = state.players.get(item.carrierId);
+        if (!carrier) {
+            // Should be handled by updateCarriedItemPosition, but drop here as a safeguard
+            console.warn(`Stealing check: Carrier ${item.carrierId} for item ${item.id} not found. Dropping item.`);
+            item.status = 'dropped';
+            item.carrierId = null;
+            continue;
+        }
 
-        // --- Prepare Debug Data --- Capture positions used for this check
-        // We capture it here *before* the distance check, as this is the data we want to visualize
-        debugData = {
-            carrierId: item.carrierId,
-            carrierX: carrier.x,
-            carrierY: carrier.y,
-            stealerId: potentialStealerId,
-            stealerX: potentialStealer.x,
-            stealerY: potentialStealer.y
-        };
-        // --------------------------
+        // Check against all other players
+        for (const potentialStealerId of playerIds) {
+            if (potentialStealerId === item.carrierId) continue; // Cannot steal from self
 
-        const dSq = distSq(carrier.x, carrier.y, potentialStealer.x, potentialStealer.y);
+            const potentialStealer = state.players.get(potentialStealerId);
 
-        if (dSq <= collisionThresholdSq) {
-            // Steal occurred!
-            console.log(`[${potentialStealerId}] Player ${potentialStealer.name} (${potentialStealer.team}) STOLE item from [${item.carrierId}] Player ${carrier.name} (${carrier.team})!`);
-            item.carrierId = potentialStealerId;
-            item.lastStealTimestamp = currentTime; // Set timestamp
-            return debugData;
+            if (!potentialStealer || potentialStealer.team === carrier.team) {
+                continue; // Skip if player doesn't exist or is on the same team
+            }
+
+            // Use player collision radius for steal check distance
+            const collisionThresholdSq = PLAYER_COLLISION_RADIUS_SQ + PLAYER_COLLISION_RADIUS_SQ; // Simple sum of radii squared
+
+            // --- Prepare Debug Data --- Capture positions used for this check
+            latestDebugData = {
+                carrierId: item.carrierId,
+                carrierX: carrier.x,
+                carrierY: carrier.y,
+                stealerId: potentialStealerId,
+                stealerX: potentialStealer.x,
+                stealerY: potentialStealer.y
+            };
+            // --------------------------
+
+            const dSq = distSq(carrier.x, carrier.y, potentialStealer.x, potentialStealer.y);
+
+            if (dSq <= collisionThresholdSq) {
+                // Steal occurred!
+                console.log(`[${potentialStealerId}] Player ${potentialStealer.name} (${potentialStealer.team}) STOLE item ${item.id} from [${item.carrierId}] Player ${carrier.name} (${carrier.team})!`);
+                item.carrierId = potentialStealerId;
+                item.lastStealTimestamp = currentTime; // Set cooldown timestamp for this item
+                // Update item position to prevent visual glitches before next position update
+                item.x = NaN;
+                item.y = NaN;
+                return latestDebugData; // Return debug data for the successful steal
+            }
         }
     }
-    // If loop completes without steal, return the debug data from the last check performed (or null if loop didn't run)
-    return debugData;
+
+    // If loop completes without steal, return the debug data from the last distance check performed
+    return latestDebugData;
 }
 
 /**
  * Updates the visual position of the item if it's carried.
  */
 export function updateCarriedItemPosition(state: ArenaState): void {
-    const item = state.item;
-    if (item.status !== 'carried' || !item.carrierId) {
-        return;
-    }
+    state.items.forEach(item => {
+        if (item.status !== 'carried' || !item.carrierId) {
+            return; // Skip if not carried
+        }
 
-    const carrier = state.players.get(item.carrierId);
-    if (carrier) {
-        item.x = carrier.x;
-        item.y = carrier.y;
-    } else {
-        // Carrier disconnected or removed - reset item as fallback
-        console.warn(`Carried item position update: Carrier ${item.carrierId} not found. Resetting item.`);
-        resetItemState(item);
-    }
+        const carrier = state.players.get(item.carrierId);
+        if (carrier) {
+            // Update item position to match carrier
+            item.x = carrier.x;
+            item.y = carrier.y;
+        } else {
+            // Carrier disconnected or removed - drop the item
+            console.warn(`Carried item position update: Carrier ${item.carrierId} for item ${item.id} not found. Dropping item.`);
+            item.status = 'dropped';
+            // Position was likely already NaN, but setting it helps clarify intent?
+            // We need a valid position though! Try to guess based on last known good spot?
+            // For now, dropping at origin as a fallback.
+            // TODO: Store last known good position before carrier disconnect?
+            item.x = 0;
+            item.y = 0;
+            item.carrierId = null;
+        }
+    });
 }

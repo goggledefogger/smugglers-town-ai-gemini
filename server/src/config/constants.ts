@@ -22,6 +22,7 @@ export const PLAYER_EFFECTIVE_RADIUS = 1.5; // meters (distance from center to e
 
 // Gameplay Constants
 export const ROAD_SPEED_MULTIPLIER = 3; // Speed on roads is half of base speed (Was 5.0)
+export const NUM_ITEMS = 4; // Number of items to spawn each round
 
 // Collision / Gameplay Radii (Squared for cheaper checks)
 export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for stealing check)
@@ -30,7 +31,8 @@ export const BASE_RADIUS_SQ = 30 * 30; // meters^2 (Should match client VISUAL_B
 export const STEAL_COOLDOWN_MS = 500; // milliseconds (Reduced for responsiveness)
 
 // Spawn Area
-export const SPAWN_RADIUS = 10; // meters
+export const ITEM_SPAWN_RADIUS = 50; // meters - Radius around origin for item spawns
+export const PLAYER_SPAWN_RADIUS = 10; // meters - Radius around origin for player spawns
 
 // Base Positions (Meters from Origin)
 export const BASE_DISTANCE = 80; // meters

@@ -1,5 +1,6 @@
 import { Room, Client } from "@colyseus/core";
-import { ArenaState, Player } from "./schemas/ArenaState";
+import { ArenaState, Player, FlagState } from "./schemas/ArenaState";
+import { v4 as uuidv4 } from 'uuid';
 
 // Import constants, helpers, and controllers
 import * as Constants from "./config/constants";
@@ -7,7 +8,6 @@ import { lerp, angleLerp, distSq } from "./utils/helpers"; // Keep helpers neede
 import { updateAIState } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
 import {
-    resetItemState,
     checkItemPickup,
     checkScoring,
     checkStealing,
@@ -51,16 +51,12 @@ export class ArenaRoom extends Room<ArenaState> {
     this.setState(new ArenaState());
     this.state.redScore = 0;
     this.state.blueScore = 0;
-    resetItemState(this.state.item); // Use helper to init item
-
-    // Initialize timer using constant
     this.state.gameTimeRemaining = GAME_DURATION_SECONDS;
-    console.log(`Game timer initialized to ${this.state.gameTimeRemaining} seconds.`);
-
-    // Initialize road status cache (empty)
     this.playerRoadStatusCache = new Map<string, RoadStatus>();
 
-    console.log(`Initialized item at (${this.state.item.x}, ${this.state.item.y})`);
+    this.resetRound(); // Initialize items
+
+    console.log(`Game timer initialized to ${this.state.gameTimeRemaining} seconds.`);
 
     // Register message handlers
     this.registerMessageHandlers();
@@ -89,19 +85,18 @@ export class ArenaRoom extends Room<ArenaState> {
 
     const leavingPlayer = this.state.players.get(client.sessionId);
 
-    // Handle item drop if player was carrying
-    if (this.state.item.carrierId === client.sessionId) {
-        if (leavingPlayer) {
-            console.log(`[${client.sessionId}] Player carrying item left. Dropping at (${leavingPlayer.x.toFixed(1)}, ${leavingPlayer.y.toFixed(1)})`);
-            this.state.item.status = 'dropped';
-            this.state.item.x = leavingPlayer.x;
-            this.state.item.y = leavingPlayer.y;
-            this.state.item.carrierId = null;
-        } else {
-            console.warn(`[${client.sessionId}] Carrier left but player state not found? Resetting item.`);
-            resetItemState(this.state.item);
+    // Handle item drop if player was carrying ANY item
+    this.state.items.forEach(item => {
+        if (item.carrierId === client.sessionId) {
+            console.log(`[${client.sessionId}] Player carrying item ${item.id} left.`);
+            item.status = 'dropped';
+            // Keep item at carrier's last known position (or close)
+            item.x = leavingPlayer?.x ?? 0;
+            item.y = leavingPlayer?.y ?? 0;
+            item.carrierId = null;
+            console.log(`   Item ${item.id} dropped at (${item.x.toFixed(1)}, ${item.y.toFixed(1)})`);
         }
-    }
+    });
 
     // Clean up persistent ID mapping
     this.cleanupPersistentId(client.sessionId);
@@ -115,6 +110,8 @@ export class ArenaRoom extends Room<ArenaState> {
 
     // Check if AI needs removal
     this.checkAndRemoveAI();
+
+    updateCarriedItemPosition(this.state);
   }
 
   onDispose() {
@@ -205,23 +202,19 @@ export class ArenaRoom extends Room<ArenaState> {
         const isOnRoad = this.playerRoadStatusCache.get(sessionId)?.isOnRoad ?? false;
         // Pass isOnRoad status to updateHumanPlayerState
         updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
-
-        // --- Update Game Timer ---
-        if (this.state.gameTimeRemaining > 0) {
-            this.state.gameTimeRemaining -= dt;
-            if (this.state.gameTimeRemaining <= 0) {
-                this.state.gameTimeRemaining = 0;
-                console.log("GAME OVER! Timer reached zero.");
-                // TODO: Implement game over logic (e.g., lock room, determine winner)
-                // this.lock(); // Example: Prevent further joins/actions
-            }
-        }
-        // -----------------------
     });
 
     // 3. Apply Game Rules (after all players have moved)
     checkItemPickup(this.state, playerIds);
     checkScoring(this.state, playerIds); // Check scoring before stealing
+
+    // --- Add Round Reset Check HERE ---
+    const allScored = this.state.items.every(item => item.status === 'scored');
+    if (allScored && this.state.items.length > 0) { // Ensure items exist before checking
+        console.log("[Update] All items scored! Resetting round."); // Added log
+        this.resetRound();
+    }
+    // ---------------------------------
 
     // Check stealing and get potential debug data
     const stealDebugData = checkStealing(this.state, playerIds, this.clock.currentTime);
@@ -231,21 +224,6 @@ export class ArenaRoom extends Room<ArenaState> {
     }
 
     updateCarriedItemPosition(this.state);
-
-    // 4. Send Reset Notifications and Clear Flags
-    playerIds.forEach(sessionId => {
-        if (this.aiPlayers.has(sessionId)) return; // Skip AI
-
-        const player = this.state.players.get(sessionId);
-        if (player && player.justReset) {
-            const client = this.clients.find(c => c.sessionId === sessionId);
-            if (client) {
-                client.send("water_reset");
-                console.log(`Sent water_reset notification to ${player.name} (${sessionId})`);
-            }
-            player.justReset = false; // Reset the flag in the state
-        }
-    });
   }
 
   // --- Message Handlers ---
@@ -333,7 +311,7 @@ export class ArenaRoom extends Room<ArenaState> {
     const player = new Player();
     player.name = `Player ${sessionId.substring(0, 3)}`;
     const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * Constants.SPAWN_RADIUS;
+    const radius = Math.random() * Constants.PLAYER_SPAWN_RADIUS;
     player.x = Math.cos(angle) * radius;
     player.y = Math.sin(angle) * radius;
     player.heading = 0;
@@ -345,7 +323,7 @@ export class ArenaRoom extends Room<ArenaState> {
     const player = new Player();
     player.name = `Bot ${this.aiCounter-1} (${team.substring(0,1)})`;
     const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * Constants.SPAWN_RADIUS;
+    const radius = Math.random() * Constants.PLAYER_SPAWN_RADIUS;
     player.x = Math.cos(angle) * radius;
     player.y = Math.sin(angle) * radius;
     player.heading = 0;
@@ -397,16 +375,59 @@ export class ArenaRoom extends Room<ArenaState> {
              const aiPlayer = this.state.players.get(aiSessionId);
              console.log(`=> Removing AI ${aiPlayer?.name || aiSessionId}`);
              // Check if AI was carrying item
-             if (this.state.item.carrierId === aiSessionId) {
-                 console.log(`AI ${aiSessionId} was carrying item. Resetting item.`);
-                 resetItemState(this.state.item);
-             }
+             this.state.items.forEach(item => {
+                 if (item.carrierId === aiSessionId) {
+                     console.log(`   AI ${aiSessionId} was carrying item ${item.id}. Dropping item.`);
+                     item.status = 'dropped';
+                     item.x = aiPlayer?.x ?? 0;
+                     item.y = aiPlayer?.y ?? 0;
+                     item.carrierId = null;
+                 }
+             });
              // Remove AI state
              this.removePlayerState(aiSessionId); // Reuse player removal logic
              this.aiPlayers.delete(aiSessionId); // Remove from AI tracking set
         });
         // Reset AI counter? Maybe not needed if IDs are unique enough
     }
+  }
+
+  // --- Round Management Helpers ---
+
+  private spawnNewItem(itemId: string): FlagState {
+      const newItem = new FlagState();
+      newItem.id = itemId;
+      newItem.status = 'available';
+      // Random position within spawn radius
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * Constants.ITEM_SPAWN_RADIUS;
+      newItem.x = Math.cos(angle) * radius;
+      newItem.y = Math.sin(angle) * radius;
+      newItem.carrierId = null;
+      newItem.lastStealTimestamp = 0;
+      console.log(`   Spawning item ${itemId} at (${newItem.x.toFixed(1)}, ${newItem.y.toFixed(1)})`);
+      return newItem;
+  }
+
+  private resetRound(): void {
+    console.log("Executing resetRound...");
+    // Reset scores
+    this.state.redScore = 0;
+    this.state.blueScore = 0;
+    console.log(` -> Scores reset: Red=${this.state.redScore}, Blue=${this.state.blueScore}`);
+
+    // Clear existing items from state AND refs
+    this.state.items.clear();
+    console.log(` -> Cleared existing items. Count: ${this.state.items.length}`);
+
+    // Spawn new items
+    for (let i = 0; i < Constants.NUM_ITEMS; i++) {
+        const newItemId = `item-${i}`;
+        const newItem = this.spawnNewItem(newItemId);
+        this.state.items.push(newItem);
+        console.log(` -> Spawned item ${newItem.id} at (${newItem.x.toFixed(1)}, ${newItem.y.toFixed(1)})`);
+    }
+    console.log(`Finished resetRound. Total items: ${this.state.items.length}`);
   }
 }
 

@@ -1,5 +1,5 @@
 // TEMPORARY DUPLICATION - Ideally use a shared package or monorepo
-import { Schema, MapSchema, type } from "@colyseus/schema";
+import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
 
 export class Player extends Schema {
   @type("string") name: string = "Guest"; // Default name
@@ -12,10 +12,10 @@ export class Player extends Schema {
 
 // Schema for a single flag (match server)
 export class FlagState extends Schema {
-  // @type("string") team: string = ""; // REMOVED
-  @type("string") status: "atBase" | "carried" | "dropped" = "atBase";
-  @type("number") x: number = NaN; // Meters (NaN when carried)
-  @type("number") y: number = NaN; // Meters (NaN when carried)
+  @type("string") id: string = ""; // Unique ID for each item
+  @type("string") status: 'available' | 'dropped' | 'carried' | 'scored' = 'available'; // Added 'scored', changed default
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
   @type("string") carrierId: string | null = null; // Session ID of player carrying
   @type("number") lastStealTimestamp: number = 0; // Server time (ms) of last steal
 }
@@ -36,8 +36,8 @@ export class ArenaState extends Schema {
 
   @type("number") gameTimeRemaining: number = 300; // Must match server default
 
-  // Match server: Single generic item
-  @type(FlagState) item = new FlagState(); // Represents the single pickup item
+  // Match server: Multiple items
+  @type([ FlagState ]) items = new ArraySchema<FlagState>();
 
   // @type(ZoneState) waterZone = new ZoneState(); // <-- REMOVE THIS LINE
 

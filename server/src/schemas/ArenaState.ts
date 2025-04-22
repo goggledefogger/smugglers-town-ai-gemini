@@ -1,4 +1,4 @@
-import { Schema, MapSchema, type } from "@colyseus/schema";
+import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
 
 export class Player extends Schema {
   @type("string") name: string = "Guest"; // Default name
@@ -12,11 +12,12 @@ export class Player extends Schema {
 
 // Schema for a single flag
 export class FlagState extends Schema {
-  @type("string") status: "atBase" | "carried" | "dropped" = "atBase";
-  @type("number") x: number = NaN; // Meters (NaN when carried)
-  @type("number") y: number = NaN; // Meters (NaN when carried)
-  @type("string") carrierId: string | null = null; // Session ID of player carrying
-  @type("number") lastStealTimestamp: number = 0; // Server time (ms) of last steal
+  @type("string") id: string = ""; // Unique ID for each item
+  @type("string") status: 'available' | 'dropped' | 'carried' | 'scored' = 'available'; // Added 'scored', changed default
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  @type("string") carrierId: string | null = null;
+  @type("number") lastStealTimestamp: number = 0; // Added for steal cooldown
 }
 
 export class ArenaState extends Schema {
@@ -27,8 +28,8 @@ export class ArenaState extends Schema {
   @type("number") blueScore: number = 0;
   @type("number") gameTimeRemaining: number = 300; // e.g., 5 minutes = 300 seconds
 
-  // Single generic item instead of two flags
-  @type(FlagState) item = new FlagState(); // Represents the single pickup item
+  // Multiple items
+  @type([ FlagState ]) items = new ArraySchema<FlagState>();
 
   // Add more state later: bases, game timer, etc.
 }

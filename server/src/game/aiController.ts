@@ -4,7 +4,7 @@
  * Logic for updating AI player state (targeting and movement).
  */
 
-import { ArenaState, Player } from "../schemas/ArenaState";
+import { ArenaState, Player, FlagState } from "../schemas/ArenaState";
 import { lerp, angleLerp } from "../utils/helpers";
 import {
     MAX_SPEED,
@@ -17,6 +17,13 @@ import {
     RED_BASE_POS,
     BLUE_BASE_POS
 } from "../config/constants";
+
+// Helper function to calculate squared distance
+const distSq = (x1: number, y1: number, x2: number, y2: number): number => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return dx * dx + dy * dy;
+};
 
 // Define type for velocity maps for clarity
 type PlayerVelocity = { vx: number, vy: number };
@@ -34,37 +41,60 @@ export function updateAIState(
     isOnRoad: boolean,
     dt: number
 ): void {
-    let targetX = 0;
-    let targetY = 0;
+    let targetX: number | null = null;
+    let targetY: number | null = null;
     let targetFound = false;
 
-    // 1. Determine Target
-    if (state.item.carrierId === sessionId) {
-        // AI has the item, target its own base
-        targetX = aiPlayer.team === "Red" ? RED_BASE_POS.x : BLUE_BASE_POS.x;
-        targetY = aiPlayer.team === "Red" ? RED_BASE_POS.y : BLUE_BASE_POS.y;
-        targetFound = true;
-    } else if (state.item.carrierId === null || state.item.carrierId === undefined) {
-        // Item is available, target the item
-        targetX = state.item.x;
-        targetY = state.item.y;
+    // 1. Determine Target (Multiple Items)
+    let currentTarget: FlagState | Player | { x: number, y: number } | null = null;
+    let minDistanceSq = Infinity;
+
+    // Check if AI is carrying any item
+    const carriedItem = state.items.find(item => item.carrierId === sessionId);
+
+    if (carriedItem) {
+        // AI has an item, target its own base
+        currentTarget = aiPlayer.team === "Red" ? RED_BASE_POS : BLUE_BASE_POS;
         targetFound = true;
     } else {
-        // Item is carried by someone else: Target the opponent carrier
-        const carrierId = state.item.carrierId;
-        if (carrierId) {
-            const carrier = state.players.get(carrierId);
-            if (carrier && carrier.team !== aiPlayer.team) {
-                targetX = carrier.x;
-                targetY = carrier.y;
-                targetFound = true;
-            } else {
-                targetFound = false; // Carrier friendly or missing, idle
+        // Find nearest available/dropped item
+        state.items.forEach(item => {
+            if (item.status === 'available' || item.status === 'dropped') {
+                const dSq = distSq(aiPlayer.x, aiPlayer.y, item.x, item.y);
+                if (dSq < minDistanceSq) {
+                    minDistanceSq = dSq;
+                    currentTarget = item;
+                    targetFound = true;
+                }
             }
-        } else {
-             targetFound = false; // Should not happen, idle
-             console.warn(`[${sessionId}] AI item status 'carried' but carrierId null?`);
+        });
+
+        // If no available item found, find nearest opponent carrier
+        if (!targetFound) {
+            minDistanceSq = Infinity; // Reset min distance for carrier search
+            state.items.forEach(item => {
+                if (item.status === 'carried' && item.carrierId) {
+                    const carrier = state.players.get(item.carrierId);
+                    if (carrier && carrier.team !== aiPlayer.team) {
+                        const dSq = distSq(aiPlayer.x, aiPlayer.y, carrier.x, carrier.y);
+                        if (dSq < minDistanceSq) {
+                            minDistanceSq = dSq;
+                            currentTarget = carrier;
+                            targetFound = true;
+                        }
+                    }
+                }
+            });
         }
+    }
+
+    // Extract target coordinates if a target was found
+    if (targetFound && currentTarget) {
+        targetX = currentTarget.x;
+        targetY = currentTarget.y;
+    } else {
+        targetX = null; // No valid target
+        targetY = null;
     }
 
     // 2. Calculate Desired Velocity
@@ -78,7 +108,7 @@ export function updateAIState(
         ? MAX_SPEED * AI_SPEED_MULTIPLIER * ROAD_SPEED_MULTIPLIER
         : MAX_SPEED * AI_SPEED_MULTIPLIER;
 
-    if (targetFound) {
+    if (targetX !== null && targetY !== null) {
         const dirX = targetX - aiPlayer.x;
         const dirY = targetY - aiPlayer.y;
         const dist = Math.sqrt(dirX * dirX + dirY * dirY);

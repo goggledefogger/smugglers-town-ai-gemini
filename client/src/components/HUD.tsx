@@ -6,7 +6,7 @@ interface HUDProps {
   blueScore: number;
   gameTimeRemaining: number | undefined; // Can be undefined initially
   localPlayerTeam?: 'Red' | 'Blue';
-  itemStatusString?: string;
+  itemsScoredCount: number; // Replaced itemStatusString
 }
 
 // Helper to format seconds into MM:SS
@@ -19,7 +19,7 @@ const formatTime = (totalSeconds: number | undefined): string => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, localPlayerTeam, itemStatusString }) => {
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, localPlayerTeam, itemsScoredCount }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     position: 'absolute',
@@ -58,12 +58,13 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, local
     fontWeight: 'bold',
   };
 
-  // Style for item status
-  const itemStatusStyle: React.CSSProperties = {
-      minWidth: '150px', // Give it some space
+  // Style for item count
+  const itemCountStyle: React.CSSProperties = {
+      minWidth: '100px', // Give it some space
       textAlign: 'center',
-      fontSize: '0.9em', // Slightly smaller
+      fontSize: '0.9em',
       opacity: 0.9,
+      fontVariantNumeric: 'tabular-nums',
   };
 
   const playerTeamColor = localPlayerTeam === 'Red' ? redScoreStyle.color : localPlayerTeam === 'Blue' ? blueScoreStyle.color : 'white';
@@ -84,12 +85,10 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, local
       {/* Display Scores */}
       <div style={redScoreStyle}>{redScore}</div>
 
-      {/* Display Item Status */}
-      {itemStatusString && (
-          <div style={itemStatusStyle}>
-              {itemStatusString}
-          </div>
-      )}
+      {/* Display Item Count */}
+      <div style={itemCountStyle}>
+          Items: {itemsScoredCount} / 4 {/* TODO: Get total number from constant/config */}
+      </div>
     </div>
   );
 };

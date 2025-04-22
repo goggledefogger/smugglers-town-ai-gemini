@@ -44,17 +44,14 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Update client and server to import from shared packages
 - [x] Fix path alias and build issues related to shared packages
 - [x] Move remaining client coordinate utilities (`worldToGeo`, etc.) to `shared-utils`
+- [x] Implement multiple simultaneous items with random spawn locations within defined area
 
 ## In Progress Tasks
 
-- [ ] Improve HUD with game state info (score, timer✅, etc.)
-- [ ] Refine player/item sprite graphics/animations (Golden Toilet ✅ - Basic GFX added)
+- [ ] Refine player/item sprite graphics/animations
 
 ## Future Tasks
 
-- [ ] Implement multiple simultaneous items (e.g., 2-5 toilets):
-    - Pseudo-random spawn locations within defined area.
-    - Track status for each item individually.
 - [ ] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)

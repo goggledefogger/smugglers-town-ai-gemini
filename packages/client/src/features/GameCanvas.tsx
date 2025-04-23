@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
@@ -88,15 +88,22 @@ const GameCanvas: React.FC = () => {
 
     const inputVector = useInputHandling();
     const mapInstance = useMapLibre({ mapContainerRef });
-    const pixiRefs = usePixiApp({
-        pixiContainerRef,
-        onPixiReady: () => setIsPixiReady(true) // Set flag when Pixi is ready
-    });
 
     // Local Component State
     const [isPixiReady, setIsPixiReady] = useState(false);
     const [showResetMessage] = useState(false);
     const [localPlayerTeam, setLocalPlayerTeam] = useState<'Red' | 'Blue' | undefined>(undefined);
+
+    // Stable callback for when Pixi is ready
+    const handlePixiReady = useCallback(() => {
+        console.log("[GameCanvas handlePixiReady] Setting isPixiReady to true");
+        setIsPixiReady(true);
+    }, []); // Empty dependency array ensures the function identity is stable
+
+    const pixiRefs = usePixiApp({
+        pixiContainerRef,
+        onPixiReady: handlePixiReady // Pass the stable callback
+    });
 
     // TODO: Implement message handling from useColyseus
     // useEffect(() => { ... listen for water_reset ... });

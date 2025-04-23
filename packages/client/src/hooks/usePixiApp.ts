@@ -52,6 +52,7 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
     const pixiInitComplete = useRef(false);
 
     useEffect(() => {
+        console.log("[usePixiApp useEffect] START - Running setup...");
         isMounted.current = true;
         pixiInitComplete.current = false;
         let app: PIXI.Application;
@@ -141,9 +142,10 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
         setupPixi();
 
         return () => {
+            console.log("[usePixiApp useEffect] CLEANUP - Running cleanup...");
             isMounted.current = false;
             if (pixiRefs.current.app && pixiInitComplete.current) {
-                console.log("[usePixiApp] Destroying initialized Pixi app...");
+                console.log("[usePixiApp useEffect CLEANUP] Destroying initialized Pixi app...");
                 pixiRefs.current.app.destroy(true, { children: true, texture: true });
                 pixiRefs.current = { // Reset refs
                     app: null, carSprite: null, otherPlayerSprites: { current: {} }, itemSprites: { current: new Map() },
@@ -151,7 +153,7 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
                     debugCarrierSprite: null, debugStealerSprite: null
                 };
             } else if (pixiRefs.current.app) {
-                console.log("[usePixiApp] Pixi app ref exists but init incomplete, skipping destroy.");
+                console.log("[usePixiApp useEffect CLEANUP] Pixi app ref exists but init incomplete, skipping destroy.");
             }
             pixiInitComplete.current = false;
         };

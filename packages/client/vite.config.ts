@@ -15,5 +15,6 @@ export default defineConfig({
   server: {
     host: true, // Allow connections from any host
     port: 3010, // Use port 3010
+    allowedHosts: ['smugglers.roytown.net'], // Allow access via this hostname
   }
 })

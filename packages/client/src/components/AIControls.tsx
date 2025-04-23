@@ -5,19 +5,27 @@ interface AIControlsProps {
 }
 
 const AIControls: React.FC<AIControlsProps> = ({ onAddAi }) => {
+  // Base button style from our design system concept
+  const baseButtonStyle = "block w-full text-center px-3 py-1.5 rounded font-semibold shadow-md transition-colors duration-150 text-sm"; // Centered text, slightly larger padding
+
   return (
-    <div className="absolute top-4 right-4 z-50 flex flex-col space-y-2 pointer-events-auto">
+    // Use inline style for position, Tailwind for the rest
+    <div
+      style={{ position: 'absolute', top: '1rem', right: '1rem' }} // ~ top-4 right-4
+      className="p-2 bg-gray-800 bg-opacity-70 rounded text-white text-xs shadow-md z-30 space-y-2"
+    >
+      <span className="block font-bold mb-1 text-center">Add AI Player:</span>
       <button
         onClick={() => onAddAi('Red')}
-        className="bg-red-600/80 hover:bg-red-700/90 text-white font-semibold py-2 px-4 rounded-lg text-sm shadow transition-colors duration-150"
+        className={`${baseButtonStyle} bg-red-600/80 hover:bg-red-700/90 text-white`}
       >
-        Add Red AI
+        Team Red
       </button>
       <button
         onClick={() => onAddAi('Blue')}
-        className="bg-blue-600/80 hover:bg-blue-700/90 text-white font-semibold py-2 px-4 rounded-lg text-sm shadow transition-colors duration-150"
+        className={`${baseButtonStyle} bg-blue-600/80 hover:bg-blue-700/90 text-white`}
       >
-        Add Blue AI
+        Team Blue
       </button>
     </div>
   );

@@ -42,8 +42,13 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Configure root dev script for automatic shared package builds (concurrently)
 - [x] Tune collision radius for better feel (set to 1.5m)
 - [x] Allow item transfer on collision between teammates (removed team check)
+- [x] Implement initial client-side UI design system using Tailwind CSS (panels, buttons)
+- [x] Implement user selection of MapTiler map styles (client-side only, using inline style positioning)
 
 ## In Progress Tasks
+
+- [ ] Investigate and fix root cause of Tailwind CSS positioning utility failures
+- [ ] Refactor HUD component to use Tailwind classes for non-positioning styles
 
 ## Future Tasks
 
@@ -84,6 +89,6 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `package.json` (in root **and packages**): Project dependencies and scripts **(root includes concurrently setup)**.
 - ✅ `tsconfig.json` (in root and packages): TypeScript configurations.
 - ✅ `pnpm-workspace.yaml`: Defines PNPM workspaces.
-- ✅ `.env`: Environment variables (e.g., `VITE_MAPLIBRE_STYLE_URL`).
+- ✅ `.env`: Environment variables
 - ✅ `.gitignore`: **Includes build artifacts like .tsbuildinfo.**
 - ✅ `TASKS.md`: This file.

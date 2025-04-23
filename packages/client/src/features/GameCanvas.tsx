@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
+import MapStyleSelector from '../components/MapStyleSelector'; // <-- ADDED
 import { useColyseus } from '../hooks/useColyseus';
 import { useInputHandling } from '../hooks/useInputHandling';
 import { useMapLibre } from '../hooks/useMapLibre';
@@ -9,60 +10,9 @@ import { usePixiApp } from '../hooks/usePixiApp'; // Keep PixiRefs for type safe
 import { useGameLoop } from '../hooks/useGameLoop';
 
 // Map and Style
-// Read style URL from environment variable
-const MAP_STYLE_URL = import.meta.env.VITE_MAPLIBRE_STYLE_URL;
-if (!MAP_STYLE_URL) {
-    console.error("ERROR: VITE_MAPLIBRE_STYLE_URL environment variable is not set!");
-    // Potentially fall back to a default or throw an error
-}
+// Use a default style ID initially, will be refactored to read from env/state
+const DEFAULT_MAP_STYLE_ID = 'streets-v2';
 
-// Game Constants - Focus on Pixel Speed for now
-// const MAX_SPEED_MPS = 14; // Target real-world speed (for later)
-// const PIXELS_PER_METER = 8; // Removing this direct link for now
-// const MAX_SPEED_PIXELS = 250; // TUNABLE: Target pixels/second panning speed
-// const ACCEL_RATE = 10; // TUNABLE: How quickly we reach max speed (higher = faster)
-// const TURN_SMOOTH = 12;
-
-// Client-side visual tuning
-// const INTERPOLATION_FACTOR = 0.3; // Keep the factor from before
-
-// Mirror Server Game Logic Constants (needed for base rendering)
-// const BASE_DISTANCE = 150; // Meters from origin along X axis - REMOVED
-// const Y_OFFSET = 5; // Small vertical offset from center line - REMOVED
-// const BASE_RADIUS = 40; // Meters (for scoring/rendering) - REMOVED
-
-// --- Use Server Constants --- (We'll assume these are known or derived from state later)
-// For rendering purposes, use the server's values:
-// const SERVER_BASE_DISTANCE = 80; // meters
-// const SERVER_Y_OFFSET = 0; // meters
-// const SERVER_BASE_RADIUS = 10; // meters (sqrt of server's BASE_RADIUS_SQ=100) <- Collision radius - REMOVED (No longer needed here)
-// const VISUAL_BASE_RADIUS = 30; // meters <- Should match sqrt(server BASE_RADIUS_SQ)
-// const SERVER_COLLISION_RADIUS = 38.5; // meters <- Actual collision radius from server (for debugging viz) - REMOVED
-
-// --- Base Positions (Client-side copy for rendering/UI logic) --- MOVED TO SHARED-UTILS
-// const RED_BASE_POS = { x: -SERVER_BASE_DISTANCE, y: SERVER_Y_OFFSET };
-// const BLUE_BASE_POS = { x: SERVER_BASE_DISTANCE, y: -SERVER_Y_OFFSET };
-// ------------------------------------------------------------------
-
-// Import Hooks
-// const { useColyseus } = require('../hooks/useColyseus');
-// const { useInputHandling } = require('../hooks/useInputHandling');
-// const { useMapLibre } = require('../hooks/useMapLibre');
-// const { usePixiApp, PixiRefs } = require('../hooks/usePixiApp'); // Keep PixiRefs for type safety
-// const { useGameLoop } = require('../hooks/useGameLoop');
-
-// Helper to draw the car sprite
-// function drawCar(graphics: PIXI.Graphics, team: string) {
-//     graphics.clear(); // Clear previous drawing
-//     const color = team === 'Red' ? 0xff0000 : 0x0000ff; // Red or Blue
-//     const outlineColor = 0xffffff;
-//
-//     graphics
-//         .rect(0, 0, CAR_WIDTH, CAR_HEIGHT).fill({ color: color })
-//         .poly([CAR_WIDTH / 2, -5, CAR_WIDTH, 10, 0, 10]).fill({ color: outlineColor }); // White arrow
-//     // Ensure pivot is set (might be redundant if set once at creation, but safe)
-//     graphics.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
-// }
 
 // --- Component ---
 const GameCanvas: React.FC = () => {
@@ -87,12 +37,15 @@ const GameCanvas: React.FC = () => {
     } = useColyseus();
 
     const inputVector = useInputHandling();
-    const mapInstance = useMapLibre({ mapContainerRef });
 
     // Local Component State
+    const [currentMapStyleId, setCurrentMapStyleId] = useState<string>(DEFAULT_MAP_STYLE_ID);
     const [isPixiReady, setIsPixiReady] = useState(false);
     const [showResetMessage] = useState(false);
     const [localPlayerTeam, setLocalPlayerTeam] = useState<'Red' | 'Blue' | undefined>(undefined);
+
+    // MapLibre Hook (pass currentMapStyleId state)
+    const mapInstance = useMapLibre({ mapContainerRef, currentMapStyleId });
 
     // Stable callback for when Pixi is ready
     const handlePixiReady = useCallback(() => {
@@ -133,7 +86,7 @@ const GameCanvas: React.FC = () => {
     });
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100vh' }} className="z-0">
+    <div className="relative w-full h-screen z-0">
             {/* Map & Canvas Layers */}
             <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} className="z-10" />
             <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} className="z-20">
@@ -149,14 +102,19 @@ const GameCanvas: React.FC = () => {
                 itemsScoredCount={itemsScoredCount} // Use scored count
             />
             <AIControls onAddAi={addAi} />
+            <MapStyleSelector // <-- ADDED
+                currentStyleId={currentMapStyleId}
+                onStyleChange={setCurrentMapStyleId}
+            />
 
             {/* Colyseus Connection/Error Info (Optional Debug) */}
-            <div style={{
-                 position: 'absolute', bottom: '10px', left: '10px',
-                 backgroundColor: 'rgba(0,0,0,0.5)', color: 'white', padding: '5px', borderRadius: '3px', fontSize: '0.8em', zIndex: 50
-             }}>
+            {/* Use inline style positioning, Tailwind for others - Remove debug border */}
+            <div
+                style={{ position: 'absolute', top: '1rem', left: '1rem' }} // ~ top-4 left-4
+                className="p-2 bg-gray-800 bg-opacity-70 rounded text-white text-xs shadow-md z-30" // Removed border
+            >
                  {isConnected ? `Connected (ID: ${sessionId})` : 'Disconnected'}
-                 {colyseusError && <div style={{ color: 'red' }}>Error: {colyseusError}</div>}
+                 {colyseusError && <div style={{ marginTop: '0.25rem', color: '#fde047' }}>Error: {colyseusError}</div>} {/* ~mt-1 text-yellow-300 */}
             </div>
 
             {/* Water Reset Message (Keep local state for now) */}

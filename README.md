@@ -61,11 +61,9 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
     cd smugglers-town-ai-gemini
     ```
 2.  **Environment Variables:**
-    - Create a `.env` file in the `client/` directory:
-      ```
-      VITE_MAPLIBRE_STYLE_URL="YOUR_MAPLIBRE_STYLE_URL"
-      ```
-    - Replace `"YOUR_MAPLIBRE_STYLE_URL"` with a valid MapLibre style URL (e.g., from MapTiler Cloud, Stadia Maps, etc.).
+    - Create a `.env` file in the `packages/client/` directory
+    - Create a `.env` file in the `packages/server/` directory
+    - Replace variable values in both
 3.  **Install Dependencies:**
     - From the **root directory** (`smugglers-town-ai-gemini`), install all dependencies for all packages using `pnpm`:
       ```bash
@@ -84,7 +82,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
       ```bash
       pnpm --filter client dev
       ```
-    - Vite will build the client and provide a local URL (usually `http://localhost:5173`).
+    - Vite will build the client and provide a local URL `http://localhost:3010`.
 3.  **Open the Game:**
     - Open the client URL in your web browser.
     - Open a second tab/browser to the same URL to see multiplayer functionality.
@@ -155,6 +153,7 @@ The client uses three distinct layers for rendering visuals:
     *   **Technology:** Standard React components, HTML, CSS.
     *   **Coordinates:** Standard CSS positioning (relative to the viewport/container).
     *   **Updates:** Driven by React state changes based on server data or user input.
+    *   **Styling Approach:** Use Tailwind CSS utility classes (`className`) for appearance (colors, padding, text, borders, backgrounds). Use inline `style` props *only* for absolute positioning (`position: 'absolute'`, `top`, `left`, etc.) due to issues with Tailwind positioning utilities in this project.
 
 ## Contributing
 

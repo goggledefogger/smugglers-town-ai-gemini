@@ -135,9 +135,9 @@ export function useGameLoop({
 
         // --- Calculate dynamic dust offsets based on carHeight prop ---
         const currentCarHeight = carHeight; // Use the prop directly
-        const DUST_OFFSET_BEHIND_BASE = currentCarHeight * 0.6;
-        const DUST_OFFSET_BEHIND_SPEED_SCALE = currentCarHeight * 0.8;
-        const DUST_OFFSET_SPREAD = currentCarHeight * 1.0;
+        const DUST_OFFSET_BEHIND_BASE = currentCarHeight * 0.25; // How far behind when slow (was 0.55)
+        const DUST_OFFSET_BEHIND_SPEED_SCALE = currentCarHeight * 0.1; // Additional distance based on speed (was 0.25)
+        const DUST_OFFSET_SPREAD = currentCarHeight * 0.2; // Max lateral distance from center (was 0.4)
         // ------------------------------------
 
         if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return; // Use prop value & check validity

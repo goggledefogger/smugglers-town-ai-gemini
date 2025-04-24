@@ -162,6 +162,10 @@ export function checkPlayerCollisionsAndStealing(
             const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
             const collisionThresholdSq = combinedRadius * combinedRadius;
 
+            // --- REMOVED LOGGING FOR COLLISION CHECK ---
+            // console.log(`[Collision Check] P1: ${p1Id} (${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}), P2: ${p2Id} (${p2.x.toFixed(2)}, ${p2.y.toFixed(2)}), DistSq: ${dSq.toFixed(2)}, ThresholdSq: ${collisionThresholdSq.toFixed(2)}`);
+            // ----------------------------------------
+
              // --- Prepare Debug Data --- Capture positions used for this check
              latestDebugData = {
                 p1Id: p1Id,

@@ -45,6 +45,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implement initial client-side UI design system using Tailwind CSS (panels, buttons)
 - [x] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
 - [x] Fix vortex visual effect to appear at the precise location where the toilet was returned (scored), not at the center of the base or attached to the car
+- [x] Refactor input handling for modularity (Keyboard/Gamepad) and add Gamepad support
 
 ## In Progress Tasks
 

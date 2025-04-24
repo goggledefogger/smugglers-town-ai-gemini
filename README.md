@@ -10,6 +10,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - 2D vehicle rendering overlay using PixiJS.
 - Server-authoritative movement with client-side interpolation for smoothness.
 - Keyboard controls (WASD/Arrows) for vehicle movement.
+- Gamepad support (USB controllers) via standard browser API, prioritizing gamepad over keyboard input.
 - Meter-based coordinate system on the server, translated to GeoJSON for map display.
 - Client converts server coordinates to GeoJSON, uses MapLibre projection for Pixi sprite placement, and handles initial synchronization on refresh.
 - Car sprites loaded from a single SVG asset, dynamically rotated to match heading and tinted by team color.

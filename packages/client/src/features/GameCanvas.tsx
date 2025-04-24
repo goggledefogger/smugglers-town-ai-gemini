@@ -4,7 +4,7 @@ import HUD from '../components/HUD'; // <-- Use default import
 import AIControls from '../components/AIControls'; // <-- Use default import
 import MapStyleSelector from '../components/MapStyleSelector'; // <-- ADDED
 import { useColyseus } from '../hooks/useColyseus';
-import { useInputHandling } from '../hooks/useInputHandling';
+import { useInputManager } from '../hooks/useInputManager';
 import { useMapLibre } from '../hooks/useMapLibre';
 import { usePixiApp } from '../hooks/usePixiApp'; // Keep PixiRefs for type safety
 import { useGameLoop } from '../hooks/useGameLoop';
@@ -36,7 +36,7 @@ const GameCanvas: React.FC = () => {
         // TODO: Expose message queue or callbacks from useColyseus for water_reset etc.
     } = useColyseus();
 
-    const inputVector = useInputHandling();
+    const { inputVector } = useInputManager();
 
     // Local Component State
     const [currentMapStyleId, setCurrentMapStyleId] = useState<string>(DEFAULT_MAP_STYLE_ID);

@@ -8,6 +8,8 @@ import { RED_BASE_POS, BLUE_BASE_POS, distSq } from "@smugglers-town/shared-util
 import 'pixi.js/gif';
 import { Assets } from 'pixi.js';
 import { GifSprite, GifSource } from 'pixi.js/gif';
+// Corrected: Import the unified InputVector type
+import { type InputVector } from './useInputManager'; // Use 'type' for type-only import
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
@@ -23,8 +25,8 @@ interface UseGameLoopProps {
     items: FlagState[];
     isConnected: boolean;
     sendInput: (input: { dx: number; dy: number }) => void;
-    // Input state from useInputHandling
-    inputVector: { dx: number; dy: number };
+    // Use the unified InputVector type
+    inputVector: InputVector; // Changed from { dx: number; dy: number }
     isPixiReady: boolean;
 }
 

@@ -231,6 +231,9 @@ export class ArenaRoom extends Room<ArenaState> {
         if (aiPlayer) aiPlayer.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
         // Pass sessionId and isOnRoad status to updateAIState
         updateAIState(aiPlayer, aiSessionId, velocity, this.state, isOnRoad, dt);
+        // Update schema with calculated velocity
+        aiPlayer.vx = velocity.vx;
+        aiPlayer.vy = velocity.vy;
     });
 
     // 2. Update Human Players
@@ -251,6 +254,9 @@ export class ArenaRoom extends Room<ArenaState> {
         if (player) player.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
         // Pass isOnRoad status to updateHumanPlayerState
         updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
+        // Update schema with calculated velocity
+        player.vx = velocity.vx;
+        player.vy = velocity.vy;
     });
 
     // 3. Apply Game Rules (after all players have moved)

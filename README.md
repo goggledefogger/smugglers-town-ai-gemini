@@ -167,6 +167,10 @@ Contributions are welcome! Please open an issue or submit a pull request. (Place
 
 This project is licensed under the MIT License. (Placeholder - confirm if this is accurate).
 
+## Debugging Tips (React Hooks & State Flow)
+*   **Props vs Refs in Hooks:** When passing data into a custom hook that needs to react to changes (e.g., inside a `useEffect`), ensure you pass the actual state variable prop, not `someRef.current`. Passing `someRef.current` provides a snapshot and won't trigger the hook's effect when the underlying data changes later. Passing the state variable ensures the hook re-runs when the prop identity changes.
+*   **State Updates & Effects:** Remember that `useEffect` runs after the render. If updating state based on server data (like in `useColyseus`), ensure non-primitive state (objects, arrays, Maps) is updated by creating *new* instances so that hooks depending on that state re-run correctly.
+
 ## Adding New Gameplay Elements (Development Notes)
 
 Adding new interactive elements (e.g., different pickups, obstacles, capture points) generally follows these steps:

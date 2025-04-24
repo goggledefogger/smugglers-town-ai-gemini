@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import * as PIXI from 'pixi.js';
-import goldenToiletUrl from '/assets/golden-toilet.svg'; // Adjust path as needed
+import { ASSET_PATHS } from '../config/assets'; // <-- ADD
 
 // Constants (Consider moving shared ones)
 // REMOVED CAR_WIDTH, CAR_HEIGHT constants as they are passed in or calculated
@@ -70,7 +70,7 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 console.log("[usePixiApp] Setting up Pixi stage...");
 
                 // Create car sprite for local player (SVG texture)
-                const carTexture = await PIXI.Assets.load('/assets/car.svg');
+                const carTexture = await PIXI.Assets.load(ASSET_PATHS.CAR_SVG); // <-- USE CONSTANT
 
                 // Check if texture loaded correctly
                 if (!carTexture || carTexture.width === 0 || carTexture.height === 0) {
@@ -96,8 +96,9 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 // Initialize Item Sprites Map (texture preloading done here)
                 pixiRefs.current.itemSprites.current = new Map<string, PIXI.Sprite>();
                 try {
-                    await PIXI.Assets.load(goldenToiletUrl);
-                    console.log(`[usePixiApp] Item asset loaded: ${goldenToiletUrl}`);
+                    // Preload the golden toilet SVG if needed, though it seems unused in useGameLoop
+                    await PIXI.Assets.load(ASSET_PATHS.GOLDEN_TOILET_SVG); // <-- USE CONSTANT (Keep preloading for now)
+                    console.log(`[usePixiApp] Item asset loaded: ${ASSET_PATHS.GOLDEN_TOILET_SVG}`); // <-- USE CONSTANT
                 } catch (loadError) {
                     console.error("[usePixiApp] Failed to preload item sprite texture:", loadError);
                 }

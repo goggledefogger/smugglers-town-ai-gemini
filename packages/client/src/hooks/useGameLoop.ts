@@ -3,25 +3,17 @@ import * as PIXI from 'pixi.js';
 import { Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
-import { PixiRefs } from './usePixiApp'; // Removed unused drawCar import
+import { PixiRefs } from './usePixiApp';
 import { RED_BASE_POS, BLUE_BASE_POS, distSq, VISUAL_BASE_RADIUS } from "@smugglers-town/shared-utils"; // Import shared constants AND distSq AND VISUAL_BASE_RADIUS
 import 'pixi.js/gif';
 import { Assets } from 'pixi.js';
 import { GifSprite, GifSource } from 'pixi.js/gif';
-// Corrected: Import the unified InputVector type
 import { type InputVector } from './useInputManager'; // Use 'type' for type-only import
+import { ASSET_PATHS } from '../config/assets';
+import { useDustParticles } from './useDustParticles';
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
-
-// Dust Particle Constants
-const NUM_DUST_PARTICLES = 3;
-const DUST_PARTICLE_RADIUS = 6;
-const DUST_PARTICLE_COLOR = 0x8B4513; // SaddleBrown
-const DUST_PARTICLE_ALPHA = 0.85;
-
-const MAX_EXPECTED_SCREEN_SPEED_PER_FRAME = 60; // Keep this high for now
-
 
 interface UseGameLoopProps {
     pixiRefs: React.RefObject<PixiRefs>;
@@ -63,8 +55,6 @@ export function useGameLoop({
     const prevCarrierIdsRef = useRef<Map<string, string | undefined>>(new Map());
     // Track active vortexes for animation and position updates
     const activeVortexesRef = useRef<ActiveVortex[]>([]);
-    const playerDustParticles = useRef<Record<string, PIXI.Graphics[]>>({});
-    const playerPrevScreenPos = useRef<Record<string, { x: number, y: number }>>({});
 
     // --- Refs for frequently changing state/props ---
     const playersRef = useRef(players);
@@ -88,7 +78,7 @@ export function useGameLoop({
     // Load item texture once
     useEffect(() => {
         // Load smoking_toilet.gif as a GifSource for animation
-        Assets.load('/assets/smoking_toilet.gif')
+        Assets.load(ASSET_PATHS.SMOKING_TOILET_GIF)
             .then((source: GifSource) => {
                 itemSourceRef.current = source;
                 console.log("[useGameLoop] GIF source loaded for items.");
@@ -99,7 +89,7 @@ export function useGameLoop({
 
     // Load vortex texture once
     useEffect(() => {
-        Assets.load('/assets/vortex.gif')
+        Assets.load(ASSET_PATHS.VORTEX_GIF)
             .then((source: GifSource) => {
                 vortexSourceRef.current = source;
                 console.log("[useGameLoop] Vortex GIF source loaded.");
@@ -112,13 +102,22 @@ export function useGameLoop({
     useEffect(() => {
         // Ensure PIXI.Assets exists and is ready
         if (PIXI.Assets) {
-             PIXI.Assets.load('/assets/car.svg').then((texture: PIXI.Texture) => {
+             PIXI.Assets.load(ASSET_PATHS.CAR_SVG).then((texture: PIXI.Texture) => {
                  carTextureRef.current = texture;
              }).catch((err: any) => {
                  console.error("[useGameLoop] Error loading car texture:", err);
              });
         }
     }, []);
+
+    useDustParticles({
+        app: pixiRefs.current?.app ?? null,
+        players: players, // <-- PASS THE STATE PROP, NOT THE REF
+        pixiRefs: pixiRefs,
+        sessionIdRef: sessionIdRef,
+        carHeight: carHeight,
+    });
+    // ******************************************
 
     const gameLoop = useCallback((ticker: PIXI.Ticker) => {
         const app = pixiRefs.current?.app;
@@ -133,13 +132,7 @@ export function useGameLoop({
         const currentIsConnected = isConnectedRef.current;
         const currentSendInput = sendInputRef.current;
 
-        // --- Calculate dynamic dust offsets based on carHeight prop ---
         const currentCarHeight = carHeight; // Use the prop directly
-        const DUST_OFFSET_BEHIND_BASE = currentCarHeight * 0.25; // How far behind when slow (was 0.55)
-        const DUST_OFFSET_BEHIND_SPEED_SCALE = currentCarHeight * 0.1; // Additional distance based on speed (was 0.25)
-        const DUST_OFFSET_SPREAD = currentCarHeight * 0.2; // Max lateral distance from center (was 0.4)
-        // ------------------------------------
-
         if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return; // Use prop value & check validity
 
         const normalizedDeltaFactor = ticker.deltaMS / (1000 / 60);
@@ -321,14 +314,6 @@ export function useGameLoop({
                 const sprite = refs.otherPlayerSprites.current[pSessionId];
                 if (sprite) sprite.destroy();
                 delete refs.otherPlayerSprites.current[pSessionId];
-
-                const dust = playerDustParticles.current[pSessionId];
-                if (dust) {
-                    dust.forEach((p: PIXI.Graphics) => p.destroy());
-                    delete playerDustParticles.current[pSessionId];
-                }
-                delete playerPrevScreenPos.current[pSessionId];
-                // ---------------------------------------------
             }
         });
 
@@ -389,9 +374,6 @@ export function useGameLoop({
                  sprite.zIndex = 10;
             }
 
-            // Store position *before* update for speed calculation
-            const prevPos = playerPrevScreenPos.current[pSessionId] || { x: sprite.x, y: sprite.y };
-
             if (isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
                 try {
                     const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
@@ -414,93 +396,12 @@ export function useGameLoop({
                     }
                     sprite.visible = true;
 
-                    // --- Calculate Screen Speed ---
-                    const dx = sprite.x - prevPos.x;
-                    const dy = sprite.y - prevPos.y;
-                    const screenSpeed = Math.sqrt(dx*dx + dy*dy);
-                    const speedFactor = Math.min(1.0, screenSpeed / MAX_EXPECTED_SCREEN_SPEED_PER_FRAME);
-                    // -----------------------------
-
-                    // --- Dust Particle Logic (Simplified) ---
-                    let dustParticles = playerDustParticles.current[pSessionId];
-                    const isOffRoad = !playerState.isOnRoad;
-
-                    if (isOffRoad) {
-                        // Create particles if needed
-                        if (!dustParticles) {
-                            dustParticles = [];
-                            for (let i = 0; i < NUM_DUST_PARTICLES; i++) {
-                                const particle = new PIXI.Graphics();
-                                particle.circle(0, 0, DUST_PARTICLE_RADIUS).fill({ color: DUST_PARTICLE_COLOR, alpha: DUST_PARTICLE_ALPHA }); // Use fixed alpha
-                                particle.visible = false; // Start invisible
-                                particle.zIndex = 11;
-                                app.stage.addChild(particle);
-                                dustParticles.push(particle);
-                            }
-                            playerDustParticles.current[pSessionId] = dustParticles;
-                        }
-
-                        // Position particles (using speed for offset)
-                        const factor = speedFactor;
-                        const currentDustOffsetBehind = DUST_OFFSET_BEHIND_BASE + factor * DUST_OFFSET_BEHIND_SPEED_SCALE; // Use calculated offsets
-
-                        dustParticles.forEach((particle: PIXI.Graphics, i: number) => { // Added type annotations
-                            let localX = 0;
-                            const localY = currentDustOffsetBehind; // Y is 'behind' in local space
-
-                            // Spread particles: 0=center, 1=left, 2=right
-                            if (i === 1) { // Left particle (negative X in local space)
-                                localX = -DUST_OFFSET_SPREAD * 0.75; // Use calculated offset
-                            } else if (i === 2) { // Right particle (positive X in local space)
-                                localX = DUST_OFFSET_SPREAD * 0.75; // Use calculated offset
-                            }
-                            // Particle 0 stays at localX = 0
-
-                            const localPoint = new PIXI.Point(localX, localY);
-                            // Convert local point relative to sprite anchor to global stage coordinates
-                            const globalPoint = sprite.toGlobal(localPoint);
-
-                            // Reduce random jitter magnitude
-                            const randomX = (Math.random() - 0.5) * DUST_PARTICLE_RADIUS * 1.0;
-                            const randomY = (Math.random() - 0.5) * DUST_PARTICLE_RADIUS * 1.0;
-
-                            // Set particle position
-                            particle.x = globalPoint.x + randomX;
-                            particle.y = globalPoint.y + randomY;
-
-                            // Set fixed alpha
-                            particle.alpha = DUST_PARTICLE_ALPHA;
-                            // Visibility is handled later in a single block
-                        });
-                    }
-
-                    // --- Visibility check based on speed & road status ---
-                    const isMovingFastEnough = speedFactor > 0.01; // Keep low threshold
-                    const shouldBeVisible = isOffRoad && isMovingFastEnough;
-
-                    const particlesToCheck = dustParticles || playerDustParticles.current[pSessionId];
-                    if (particlesToCheck) {
-                        particlesToCheck.forEach((particle: PIXI.Graphics) => {
-                            particle.visible = shouldBeVisible;
-                        });
-                    }
-                    // ---------------------------------
-
                 } catch (e) {
                     sprite.visible = false;
-                    // Also hide dust particles on error
-                    const dust = playerDustParticles.current[pSessionId];
-                    if (dust) dust.forEach((p: PIXI.Graphics) => { p.visible = false; }); // Ensure hide on error, Added type annotation
                  }
             } else {
                  sprite.visible = false;
-                 // Also hide dust particles if player state is invalid
-                 const dust = playerDustParticles.current[pSessionId];
-                 if (dust) dust.forEach((p: PIXI.Graphics) => { p.visible = false; }); // Ensure hide on error, Added type annotation
             }
-
-            // Update previous position *after* using it and updating sprite
-            playerPrevScreenPos.current[pSessionId] = { x: sprite.x, y: sprite.y };
         });
 
         // --- Update Item Sprites ---

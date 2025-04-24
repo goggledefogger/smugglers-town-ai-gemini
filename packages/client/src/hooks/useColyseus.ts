@@ -1,22 +1,23 @@
+/// <reference types="vite/client" />
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Client, Room } from 'colyseus.js';
 import { v4 as uuidv4 } from 'uuid';
 import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 
-const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_ENDPOINT || 'ws://localhost:2567';
+const COLYSEUS_ENDPOINT = import.meta.env.VITE_COLYSEUS_ENDPOINT?.toString() || 'ws://localhost:2567';
 const SESSION_TAB_ID_KEY = 'smugglersTown_sessionTabId'; // REVERTED KEY - Using sessionStorage
-// const PERSISTENT_PLAYER_ID_KEY = 'smugglersTown_persistentPlayerId'; // Removed localStorage key
 
 interface ColyseusState {
     room: Room<ArenaState> | null;
     sessionId: string | null;
     players: Map<string, Player>;
-    items: FlagState[]; // Changed from single item
+    items: FlagState[];
     scores: { red: number; blue: number };
     gameTimeRemaining: number | undefined;
     isConnected: boolean;
     error: string | null;
-    itemsScoredCount: number; // Add derived state
+    itemsScoredCount: number;
 }
 
 export function useColyseus() {
@@ -29,7 +30,7 @@ export function useColyseus() {
         gameTimeRemaining: undefined,
         isConnected: false,
         error: null,
-        itemsScoredCount: 0, // Initialize
+        itemsScoredCount: 0,
     });
     const isMounted = useRef(false);
     const colyseusClient = useRef<Client | null>(null);
@@ -37,7 +38,7 @@ export function useColyseus() {
     const connectionAttempted = useRef(false); // Flag to prevent multiple connection attempts
 
     const connect = useCallback(async () => {
-        console.log("---> [useColyseus connect ENTERED]"); // Log entry
+        console.log("---> [useColyseus connect ENTERED]");
         // Prevent multiple concurrent calls
         if (connectionAttempted.current) {
             console.log("---> [useColyseus connect] Already attempting connection, skipping.");
@@ -51,7 +52,7 @@ export function useColyseus() {
             return;
         }
 
-        // Get/Set Session Tab ID using sessionStorage (Reverted)
+        // Get/Set Session Tab ID using sessionStorage
         let tabId = sessionStorage.getItem(SESSION_TAB_ID_KEY);
         if (!tabId) {
             tabId = uuidv4();
@@ -65,7 +66,7 @@ export function useColyseus() {
         colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
 
         try {
-            // Pass the tabId to the server as persistentPlayerId (Reverted)
+            // Pass the tabId to the server as persistentPlayerId
             const joinOptions = { persistentPlayerId: tabId };
             const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', joinOptions);
             roomRef.current = room; // Store room instance in ref
@@ -83,7 +84,6 @@ export function useColyseus() {
             // --- State Change Listener ---
             room.onStateChange((newState: ArenaState) => {
                  if (!isMounted.current) return;
-                // console.log("[useColyseus] State change received"); // DEBUG
                 // Calculate scored items count
                 const scoredCount = newState.items.filter((item: FlagState) => item.status === 'scored').length;
 

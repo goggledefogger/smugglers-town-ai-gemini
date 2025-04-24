@@ -43,12 +43,10 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Tune collision radius for better feel (set to 1.5m)
 - [x] Allow item transfer on collision between teammates (removed team check)
 - [x] Implement initial client-side UI design system using Tailwind CSS (panels, buttons)
-- [x] Implement user selection of MapTiler map styles (client-side only, using inline style positioning)
 
 ## In Progress Tasks
 
-- [ ] Investigate and fix root cause of Tailwind CSS positioning utility failures
-- [ ] Refactor HUD component to use Tailwind classes for non-positioning styles
+- [ ] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
 
 ## Future Tasks
 

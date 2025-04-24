@@ -153,7 +153,7 @@ The client uses three distinct layers for rendering visuals:
     *   **Technology:** Standard React components, HTML, CSS.
     *   **Coordinates:** Standard CSS positioning (relative to the viewport/container).
     *   **Updates:** Driven by React state changes based on server data or user input.
-    *   **Styling Approach:** Use Tailwind CSS utility classes (`className`) for appearance (colors, padding, text, borders, backgrounds). Use inline `style` props *only* for absolute positioning (`position: 'absolute'`, `top`, `left`, etc.) due to issues with Tailwind positioning utilities in this project.
+    *   **Positioning Note:** Due to unresolved issues with Tailwind CSS positioning utilities (`absolute`, `top-*`, `left-*`, etc.) within this project setup, absolutely positioned UI elements (like the HUD, AI Controls, Map Selector, Debug Info) should use **inline `style` props** for `position`, `top`, `left`, `right`, `bottom`. Other styling (colors, padding, text, borders) should still use standard Tailwind `className` utilities.
 
 ## Contributing
 

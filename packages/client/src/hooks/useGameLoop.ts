@@ -195,22 +195,10 @@ export function useGameLoop({
                                         vortexWorld = geoToWorld(lngLat.lng, lngLat.lat);
                                     } catch (e) {}
                                 }
-                                // DEBUG LOGGING
-                                console.log('[VORTEX DEBUG] Spawning vortex at toilet return location:', {
-                                    itemId: item.id,
-                                    vortexCarrierId,
-                                    toiletWorld: vortexWorld,
-                                    toiletScreen: { x: toiletScreenX, y: toiletScreenY }
-                                });
                                 activeVortexesRef.current.push({ sprite: vortex, worldX: vortexWorld.x, worldY: vortexWorld.y });
                             } else if (carrier) {
                                 toiletWorldX = carrier.x;
                                 toiletWorldY = carrier.y;
-                                console.log('[VORTEX DEBUG] Spawning vortex for scored carried item (carrier, no sprite, using previous carrierId):', {
-                                    itemId: item.id,
-                                    vortexCarrierId,
-                                    carrierWorld: { x: carrier.x, y: carrier.y }
-                                });
                                 activeVortexesRef.current.push({ sprite: vortex, worldX: toiletWorldX, worldY: toiletWorldY });
                             } else {
                                 // fallback
@@ -218,10 +206,6 @@ export function useGameLoop({
                             }
                         } else {
                             // Not carried, just use item's world position
-                            console.log('[VORTEX DEBUG] Spawning vortex for scored item (not carried):', {
-                                itemId: item.id,
-                                worldX: toiletWorldX, worldY: toiletWorldY
-                            });
                             activeVortexesRef.current.push({ sprite: vortex, worldX: toiletWorldX, worldY: toiletWorldY });
                         }
                         vortex.onComplete = () => { vortex.destroy(); };
@@ -287,7 +271,6 @@ export function useGameLoop({
                     newItemSprite.x = -1000; newItemSprite.y = -1000; newItemSprite.visible = false;
                     app.stage.addChild(newItemSprite);
                     refs.itemSprites.current.set(item.id, newItemSprite);
-                    console.log(`[DEBUG] Created item sprite for id=${item.id}`);
                 } else {
                     // Fallback: create a red circle if texture missing
                     const gfx = new PIXI.Graphics();

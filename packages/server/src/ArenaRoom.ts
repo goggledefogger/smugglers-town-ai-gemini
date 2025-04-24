@@ -223,6 +223,7 @@ export class ArenaRoom extends Room<ArenaState> {
         }
         // Get current road status from cache
         const isOnRoad = this.playerRoadStatusCache.get(aiSessionId)?.isOnRoad ?? false;
+        if (aiPlayer) aiPlayer.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
         // Pass sessionId and isOnRoad status to updateAIState
         updateAIState(aiPlayer, aiSessionId, velocity, this.state, isOnRoad, dt);
     });
@@ -242,6 +243,7 @@ export class ArenaRoom extends Room<ArenaState> {
         }
         // Get current road status from cache
         const isOnRoad = this.playerRoadStatusCache.get(sessionId)?.isOnRoad ?? false;
+        if (player) player.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
         // Pass isOnRoad status to updateHumanPlayerState
         updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
     });

@@ -14,7 +14,18 @@ import { type InputVector } from './useInputManager'; // Use 'type' for type-onl
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
 const VISUAL_BASE_RADIUS = 30;
+const CAR_WIDTH = 30; // Increased width for better dust spread (temporary fix)
 const CAR_HEIGHT = 20; // From usePixiApp
+
+// Dust Particle Constants
+const NUM_DUST_PARTICLES = 3;
+const DUST_PARTICLE_RADIUS = 6; // Make particles bigger
+const DUST_PARTICLE_COLOR = 0x8B4513; // SaddleBrown
+const DUST_PARTICLE_ALPHA = 0.85; // Increased alpha slightly
+const DUST_OFFSET_BEHIND_BASE = CAR_HEIGHT * 0.6; // Moderate base distance
+const DUST_OFFSET_BEHIND_SPEED_SCALE = CAR_HEIGHT * 0.8; // Moderate speed scale distance - Keep for positioning offset
+const DUST_OFFSET_SPREAD = CAR_HEIGHT * 1.0; // Keep spread wide
+const MAX_EXPECTED_SCREEN_SPEED_PER_FRAME = 60; // Keep this high for now
 
 interface UseGameLoopProps {
     pixiRefs: React.RefObject<PixiRefs>;
@@ -54,6 +65,8 @@ export function useGameLoop({
     const prevCarrierIdsRef = useRef<Map<string, string | undefined>>(new Map());
     // Track active vortexes for animation and position updates
     const activeVortexesRef = useRef<ActiveVortex[]>([]);
+    const playerDustParticles = useRef<Record<string, PIXI.Graphics[]>>({});
+    const playerPrevScreenPos = useRef<Record<string, { x: number, y: number }>>({});
 
     // --- Refs for frequently changing state/props ---
     const playersRef = useRef(players);
@@ -294,6 +307,28 @@ export function useGameLoop({
             }
         });
 
+        // --- Player Sprite Cleanup ---
+        const currentPlayerIds = new Set(currentPlayers.keys()); // Use ref value
+        const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
+
+        // Remove sprites for players who left
+        existingPlayerSpriteIds.forEach(pSessionId => {
+            if (!currentPlayerIds.has(pSessionId)) {
+                const sprite = refs.otherPlayerSprites.current[pSessionId];
+                if (sprite) sprite.destroy();
+                delete refs.otherPlayerSprites.current[pSessionId];
+
+                // --- ADDED: Cleanup Dust Particles & Prev Pos ---
+                const dust = playerDustParticles.current[pSessionId];
+                if (dust) {
+                    dust.forEach(p => p.destroy());
+                    delete playerDustParticles.current[pSessionId];
+                }
+                delete playerPrevScreenPos.current[pSessionId];
+                // ---------------------------------------------
+            }
+        });
+
         // --- Initial Placement --- (Simplified version, refine if needed)
         if (!initialPlacementDone.current && localPlayerState) { // localPlayerState derived from refs
              try {
@@ -314,65 +349,141 @@ export function useGameLoop({
         }
 
         // --- Update Player Sprites ---
-        const currentPlayerIds = new Set(currentPlayers.keys()); // Use ref value
-        const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
-
-        // Create missing player sprites
         currentPlayers.forEach((playerState: Player, pSessionId: string) => { // Use ref value
-            if (pSessionId === currentSessionId) return; // Use ref value
-            if (!refs.otherPlayerSprites.current[pSessionId]) {
-                // Use SVG car texture for all cars
-                if (!carTextureRef.current) return;
-                const sprite = new PIXI.Sprite(carTextureRef.current);
+            const isLocalPlayer = pSessionId === currentSessionId; // Use ref value
+            let sprite = isLocalPlayer ? refs.carSprite : refs.otherPlayerSprites.current[pSessionId];
+
+            // Create sprite if it doesn't exist (for remote players)
+            if (!isLocalPlayer && !sprite && carTextureRef.current) {
+                sprite = new PIXI.Sprite(carTextureRef.current);
                 sprite.anchor.set(0.5);
-                sprite.x = -1000; sprite.y = -1000; sprite.visible = false;
-                // Tint for team color
-                sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
+                sprite.width = CAR_WIDTH;
+                sprite.height = CAR_HEIGHT;
+                sprite.visible = false; // Initially hidden
+                sprite.zIndex = 10; // Ensure player sprite zIndex is set
                 app.stage.addChild(sprite);
                 refs.otherPlayerSprites.current[pSessionId] = sprite;
             }
-        });
-        // Destroy removed player sprites
-        existingPlayerSpriteIds.forEach(pSessionId => {
-            if (!currentPlayerIds.has(pSessionId)) {
-                 refs.otherPlayerSprites.current[pSessionId]?.destroy();
-                 delete refs.otherPlayerSprites.current[pSessionId];
+
+            if (!sprite) return; // Skip if sprite still couldn't be created/found
+
+            // Ensure local player sprite also has zIndex
+            if (isLocalPlayer && sprite.zIndex !== 10) {
+                 sprite.zIndex = 10;
             }
-        });
 
-        // Update positions/rotations
-        currentPlayers.forEach((playerState: Player, pSessionId: string) => { // Use ref value
-            const isLocalPlayer = pSessionId === currentSessionId; // Use ref value
-            const sprite = isLocalPlayer ? refs.carSprite : refs.otherPlayerSprites.current[pSessionId];
-            if (!sprite) return; // Add simple check
+            // Store position *before* update for speed calculation
+            const prevPos = playerPrevScreenPos.current[pSessionId] || { x: sprite.x, y: sprite.y };
 
-             if (isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
-                 try {
-                     const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
-                     const targetScreenPos = map.project([targetLng, targetLat]);
-                     if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
+            if (isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
+                try {
+                    const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
+                    const targetScreenPos = map.project([targetLng, targetLat]);
+                    if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
 
-                     const targetRotation = -playerState.heading + Math.PI / 2;
+                    const targetRotation = -playerState.heading + Math.PI / 2;
 
-                     // Tint for team color
-                     sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
+                    // Tint for team color
+                    sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
 
-                     if (!initialPlacementDone.current) { // Place directly before initial placement
-                          sprite.x = targetScreenPos.x;
-                          sprite.y = targetScreenPos.y;
-                          sprite.rotation = targetRotation;
-                     } else { // Interpolate after initial placement
-                         sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
-                         sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
-                         sprite.rotation = angleLerp(sprite.rotation, targetRotation, lerpFactor);
-                     }
-                     sprite.visible = true;
-                 } catch (e) {
+                    if (!initialPlacementDone.current) { // Place directly before initial placement
+                         sprite.x = targetScreenPos.x;
+                         sprite.y = targetScreenPos.y;
+                         sprite.rotation = targetRotation;
+                    } else { // Interpolate after initial placement
+                        sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
+                        sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
+                        sprite.rotation = angleLerp(sprite.rotation, targetRotation, lerpFactor);
+                    }
+                    sprite.visible = true;
+
+                    // --- Calculate Screen Speed ---
+                    const dx = sprite.x - prevPos.x;
+                    const dy = sprite.y - prevPos.y;
+                    const screenSpeed = Math.sqrt(dx*dx + dy*dy);
+                    const speedFactor = Math.min(1.0, screenSpeed / MAX_EXPECTED_SCREEN_SPEED_PER_FRAME);
+                    // -----------------------------
+
+                    // --- Dust Particle Logic (Simplified) ---
+                    let dustParticles = playerDustParticles.current[pSessionId];
+                    const isOffRoad = !playerState.isOnRoad;
+
+                    if (isOffRoad) {
+                        // Create particles if needed
+                        if (!dustParticles) {
+                            dustParticles = [];
+                            for (let i = 0; i < NUM_DUST_PARTICLES; i++) {
+                                const particle = new PIXI.Graphics();
+                                particle.circle(0, 0, DUST_PARTICLE_RADIUS).fill({ color: DUST_PARTICLE_COLOR, alpha: DUST_PARTICLE_ALPHA }); // Use fixed alpha
+                                particle.visible = false; // Start invisible
+                                particle.zIndex = 11;
+                                app.stage.addChild(particle);
+                                dustParticles.push(particle);
+                            }
+                            playerDustParticles.current[pSessionId] = dustParticles;
+                        }
+
+                        // Position particles (using speed for offset)
+                        const factor = speedFactor;
+                        const currentDustOffsetBehind = DUST_OFFSET_BEHIND_BASE + factor * DUST_OFFSET_BEHIND_SPEED_SCALE;
+
+                        dustParticles.forEach((particle, i) => {
+                            let localX = 0;
+                            const localY = currentDustOffsetBehind; // Y is 'behind' in local space
+
+                            // Spread particles: 0=center, 1=left, 2=right
+                            if (i === 1) { // Left particle (negative X in local space)
+                                localX = -DUST_OFFSET_SPREAD * 0.75;
+                            } else if (i === 2) { // Right particle (positive X in local space)
+                                localX = DUST_OFFSET_SPREAD * 0.75;
+                            }
+                            // Particle 0 stays at localX = 0
+
+                            const localPoint = new PIXI.Point(localX, localY);
+                            // Convert local point relative to sprite anchor to global stage coordinates
+                            const globalPoint = sprite.toGlobal(localPoint);
+
+                            // Reduce random jitter magnitude
+                            const randomX = (Math.random() - 0.5) * DUST_PARTICLE_RADIUS * 1.0; // Reduced multiplier from 2
+                            const randomY = (Math.random() - 0.5) * DUST_PARTICLE_RADIUS * 1.0; // Reduced multiplier from 2
+
+                            // Set particle position
+                            particle.x = globalPoint.x + randomX;
+                            particle.y = globalPoint.y + randomY;
+
+                            // Set fixed alpha
+                            particle.alpha = DUST_PARTICLE_ALPHA;
+                            // Visibility is handled later in a single block
+                        });
+                    }
+
+                    // --- Visibility check based on speed & road status ---
+                    const isMovingFastEnough = speedFactor > 0.01; // Keep low threshold
+                    const shouldBeVisible = isOffRoad && isMovingFastEnough;
+
+                    const particlesToCheck = dustParticles || playerDustParticles.current[pSessionId]; // Use created or existing ref
+                    if (particlesToCheck) {
+                        particlesToCheck.forEach(particle => {
+                            particle.visible = shouldBeVisible;
+                        });
+                    }
+                    // ---------------------------------
+
+                } catch (e) {
                     sprite.visible = false;
+                    // Also hide dust particles on error
+                    const dust = playerDustParticles.current[pSessionId];
+                    if (dust) dust.forEach(p => { p.visible = false; }); // Ensure hide on error
                  }
-             } else {
+            } else {
                  sprite.visible = false;
-             }
+                 // Also hide dust particles if player state is invalid
+                 const dust = playerDustParticles.current[pSessionId];
+                 if (dust) dust.forEach(p => { p.visible = false; }); // Ensure hide on error
+            }
+
+            // Update previous position *after* using it and updating sprite
+            playerPrevScreenPos.current[pSessionId] = { x: sprite.x, y: sprite.y };
         });
 
         // --- Update Item Sprites ---
@@ -568,12 +679,8 @@ export function useGameLoop({
                     } catch (err) {
                          console.error("[useGameLoop] Error removing game loop from ticker:", err);
                     }
-                 } else {
-                    // console.warn("[useGameLoop] Cannot remove ticker: app/ticker missing or loop not found."); // Removed warning
                  }
             };
-        } else if (app?.ticker && !isPixiReady) {
-             // console.log("[useGameLoop] Pixi app ready, but waiting for isPixiReady flag."); // Removed log
         }
     // Effect now depends only on isPixiReady, pixiRefs, and the stable gameLoop
     }, [pixiRefs, gameLoop, isPixiReady]);

@@ -72,6 +72,9 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
                 console.log("[usePixiApp] Pixi init ok.");
                 currentPixiContainer.appendChild(app.canvas);
 
+                // Enable z-index sorting for the stage
+                app.stage.sortableChildren = true;
+
                 console.log("[usePixiApp] Setting up Pixi stage...");
 
                 // Create car sprite for local player (SVG texture)

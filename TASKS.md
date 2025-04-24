@@ -46,6 +46,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
 - [x] Fix vortex visual effect to appear at the precise location where the toilet was returned (scored), not at the center of the base or attached to the car
 - [x] Refactor input handling for modularity (Keyboard/Gamepad) and add Gamepad support
+- [x] Add visual effect for driving off-road (e.g., dust clouds using Pixi.Graphics triggered by server state)
 
 ## In Progress Tasks
 
@@ -55,6 +56,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 - [x] Refine player/item sprite graphics/animations
 - [x] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
+- [ ] Dynamically size car sprites based on loaded SVG dimensions
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)
 - [ ] Deployment configuration (client and server)
@@ -68,8 +70,21 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 The game uses a server-authoritative architecture with client-side interpolation. The client renders the game world based on state updates received from the server and sends user input.
 
-- **Server (`packages/server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop. Uses shared schemas (`@smugglers-town/shared-schemas`) for state and shared utilities (`@smugglers-town/shared-utils`) for constants/helpers. Handles player connections, input, authoritative physics calculations, collision detection, game rules, and AI control.
-- **Client (`packages/client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. Uses shared schemas (`@smugglers-town/shared-schemas`) and utilities (`@smugglers-town/shared-utils`). Converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates visual elements between state updates.
+- **Server (`packages/server/`)**: Node.js with Colyseus. Manages the game simulation (`ArenaRoom.ts`) in a fixed update loop. Uses shared schemas (`@smugglers-town/shared-schemas`) for state and shared utilities (`@smugglers-town/shared-utils`) for constants/helpers. Handles player connections, input, authoritative physics calculations, collision detection, game rules, and AI control. **Includes logic to detect if a player is on a road using an external map query API (cached periodically) and applies a speed boost (`ROAD_SPEED_MULTIPLIER`).**
+- **Client (`packages/client/`)**: React with Vite, TypeScript, PixiJS, and MapLibre GL JS. The `GameCanvas.tsx` component manages rendering, connection to the server, input handling, and displaying the game state. Uses shared schemas (`@smugglers-town/shared-schemas`) and utilities (`@smugglers-town/shared-utils`). Converts server meter coordinates to geographic coordinates (`worldToGeo`) for map positioning and sprite projection. Interpolates visual elements between state updates. **Will add a visual effect (e.g., dust) triggered by the server-provided `isOnRoad` status.**
+
+- **Off-Road Visual Effect Implementation:**
+1. Add `isOnRoad: boolean` field to the `Player` schema (`@smugglers-town/shared-schemas`).
+2. Server (`ArenaRoom.ts`) will update this field based on its cached road status check.
+3. Client (`useGameLoop.ts`) will read the `isOnRoad` state from the player data.
+4. Client renders Pixi.Graphics dust particles attached to the player sprite.
+   - Particles are positioned behind the car using `sprite.toGlobal()`, with the distance offset slightly scaled by `speedFactor`.
+   - Particles have a fixed alpha (`DUST_PARTICLE_ALPHA`).
+   - Particles are visible only when `!playerState.isOnRoad` AND `speedFactor > 0.01` (ensuring they hide when stopped).
+   - *Note:* Initial attempts to scale particle alpha based on speed (`speedFactor`) proved complex and unreliable, leading to visibility issues. The current simpler approach (fixed alpha, visibility threshold) is more robust.
+
+- *Vortex visual effect:* When a toilet is scored, the vortex animation is spawned at the exact world position where the toilet was returned (using the last carried position), and remains static there. This ensures the effect is visually accurate and not attached to the car or base center.
+
 
 ### Relevant Files
 
@@ -94,5 +109,3 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `.env`: Environment variables
 - ✅ `.gitignore`: **Includes build artifacts like .tsbuildinfo.**
 - ✅ `TASKS.md`: This file.
-
-Vortex visual effect: When a toilet is scored, the vortex animation is spawned at the exact world position where the toilet was returned (using the last carried position), and remains static there. This ensures the effect is visually accurate and not attached to the car or base center.

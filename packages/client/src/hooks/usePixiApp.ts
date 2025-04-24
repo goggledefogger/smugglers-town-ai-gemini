@@ -3,12 +3,12 @@ import * as PIXI from 'pixi.js';
 import goldenToiletUrl from '/assets/golden-toilet.svg'; // Adjust path as needed
 
 // Constants (Consider moving shared ones)
-const CAR_WIDTH = 10;
-const CAR_HEIGHT = 20;
+// REMOVED CAR_WIDTH, CAR_HEIGHT constants as they are passed in or calculated
 
 interface UsePixiAppProps {
     pixiContainerRef: React.RefObject<HTMLDivElement>;
     onPixiReady?: (app: PIXI.Application) => void; // Callback when Pixi is ready
+    carHeight: number; // Add carHeight prop
 }
 
 export interface PixiRefs {
@@ -25,17 +25,9 @@ export interface PixiRefs {
 }
 
 // Helper to draw the car sprite (copied from GameCanvas, consider utils)
-function drawCar(graphics: PIXI.Graphics, team: string) {
-    graphics.clear();
-    const color = team === 'Red' ? 0xff0000 : 0x0000ff;
-    const outlineColor = 0xffffff;
-    graphics
-        .rect(0, 0, CAR_WIDTH, CAR_HEIGHT).fill({ color: color })
-        .poly([CAR_WIDTH / 2, -5, CAR_WIDTH, 10, 0, 10]).fill({ color: outlineColor });
-    graphics.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
-}
+// REMOVED drawCar helper as it's not used with SVG textures
 
-export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): React.MutableRefObject<PixiRefs> {
+export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixiAppProps): React.MutableRefObject<PixiRefs> { // Add carHeight to signature
     const pixiRefs = useRef<PixiRefs>({
         app: null,
         carSprite: null,
@@ -79,14 +71,27 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
 
                 // Create car sprite for local player (SVG texture)
                 const carTexture = await PIXI.Assets.load('/assets/car.svg');
+
+                // Check if texture loaded correctly
+                if (!carTexture || carTexture.width === 0 || carTexture.height === 0) {
+                    console.error("[usePixiApp] Failed to load car texture or texture has zero dimensions.");
+                    return;
+                }
+                console.log(`[usePixiApp] Car texture loaded. Dimensions: ${carTexture.width}x${carTexture.height}`);
+
                 const carSprite = new PIXI.Sprite(carTexture);
                 carSprite.anchor.set(0.5);
-                carSprite.scale.set(1); // Scale down to match intended car size
+
+                // Calculate scale based on desired height and texture height
+                const scale = carHeight / carTexture.height;
+                console.log(`[usePixiApp] Calculated car scale: ${scale} (carHeight=${carHeight})`);
+                carSprite.scale.set(scale); // Apply uniform scale
+
                 carSprite.x = -1000; carSprite.y = -1000;
                 carSprite.visible = false;
                 app.stage.addChild(carSprite);
                 pixiRefs.current.carSprite = carSprite;
-                console.log("[usePixiApp] Car sprite (SVG) added.");
+                console.log("[usePixiApp] Local car sprite added to stage.");
 
                 // Initialize Item Sprites Map (texture preloading done here)
                 pixiRefs.current.itemSprites.current = new Map<string, PIXI.Sprite>();
@@ -162,11 +167,11 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
             }
             pixiInitComplete.current = false;
         };
-    }, [pixiContainerRef, onPixiReady]); // Dependency on container ref and callback
+    }, [pixiContainerRef, onPixiReady, carHeight]); // Add carHeight to dependency array
 
     return pixiRefs;
 }
 
 // Export drawCar if needed by other modules (e.g., game loop)
 // Or keep it internal if only used during setup?
-export { drawCar };
+// REMOVED drawCar export

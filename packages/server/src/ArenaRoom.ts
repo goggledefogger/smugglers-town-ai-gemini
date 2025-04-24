@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Import constants, helpers, and controllers
 import * as Constants from "./config/constants";
 import * as ServerConstants from "./config/constants"; // Alias server-specific constants
-import { NUM_ITEMS, lerp, angleLerp, distSq } from "@smugglers-town/shared-utils"; // Import shared utils
+import { NUM_ITEMS, lerp, angleLerp, distSq, PLAYER_EFFECTIVE_RADIUS } from "@smugglers-town/shared-utils"; // Import shared utils, including PLAYER_EFFECTIVE_RADIUS
 import { updateAIState } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
 import {
@@ -51,14 +51,19 @@ export class ArenaRoom extends Room<ArenaState> {
   onCreate (options: any) {
     console.log("[ArenaRoom] Room created with options:", options);
     this.setState(new ArenaState());
+
+    // Initialize state from constants
     this.state.redScore = 0;
     this.state.blueScore = 0;
     this.state.gameTimeRemaining = GAME_DURATION_SECONDS;
+    this.state.baseRadius = Math.sqrt(ServerConstants.BASE_RADIUS_SQ); // Initialize baseRadius from constant
+
     this.playerRoadStatusCache = new Map<string, RoadStatus>();
 
     this.resetRound(); // Initialize items
 
     console.log(`Game timer initialized to ${this.state.gameTimeRemaining} seconds.`);
+    console.log(`Base radius initialized to ${this.state.baseRadius.toFixed(1)} meters.`); // Log base radius
 
     // Register message handlers
     this.registerMessageHandlers();

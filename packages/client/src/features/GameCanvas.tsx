@@ -13,6 +13,8 @@ import { useGameLoop } from '../hooks/useGameLoop';
 // Use a default style ID initially, will be refactored to read from env/state
 const DEFAULT_MAP_STYLE_ID = 'streets-v2';
 
+// --- Visual Constants ---
+const CAR_HEIGHT = 75; // Define only the height
 
 // --- Component ---
 const GameCanvas: React.FC = () => {
@@ -55,7 +57,8 @@ const GameCanvas: React.FC = () => {
 
     const pixiRefs = usePixiApp({
         pixiContainerRef,
-        onPixiReady: handlePixiReady // Pass the stable callback
+        onPixiReady: handlePixiReady, // Pass the stable callback
+        carHeight: CAR_HEIGHT, // Pass only height
     });
 
     // TODO: Implement message handling from useColyseus
@@ -82,6 +85,7 @@ const GameCanvas: React.FC = () => {
         sendInput,
         inputVector,
         isPixiReady, // Pass flag to game loop hook
+        carHeight: CAR_HEIGHT, // Pass only height
         // updateHudState removed
     });
 

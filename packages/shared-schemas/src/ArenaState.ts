@@ -32,5 +32,8 @@ export class ArenaState extends Schema {
   // Multiple items
   @type([ FlagState ]) items = new ArraySchema<FlagState>();
 
+  // Add base radius for rendering
+  @type("number") baseRadius: number = 10; // Default value, server will override
+
   // Add more state later: bases, game timer, etc.
 }

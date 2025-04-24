@@ -14,18 +14,21 @@ import { type InputVector } from './useInputManager'; // Use 'type' for type-onl
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
 const VISUAL_BASE_RADIUS = 30;
-const CAR_WIDTH = 30; // Increased width for better dust spread (temporary fix)
-const CAR_HEIGHT = 20; // From usePixiApp
+// Removed CAR_WIDTH and CAR_HEIGHT as carHeight is now a prop
+// const CAR_WIDTH = 30;
+// const CAR_HEIGHT = 20; // This is now a prop
 
 // Dust Particle Constants
 const NUM_DUST_PARTICLES = 3;
 const DUST_PARTICLE_RADIUS = 6; // Make particles bigger
 const DUST_PARTICLE_COLOR = 0x8B4513; // SaddleBrown
 const DUST_PARTICLE_ALPHA = 0.85; // Increased alpha slightly
-const DUST_OFFSET_BEHIND_BASE = CAR_HEIGHT * 0.6; // Moderate base distance
-const DUST_OFFSET_BEHIND_SPEED_SCALE = CAR_HEIGHT * 0.8; // Moderate speed scale distance - Keep for positioning offset
-const DUST_OFFSET_SPREAD = CAR_HEIGHT * 1.0; // Keep spread wide
+// Updated dust offsets to use the carHeight prop
+// const DUST_OFFSET_BEHIND_BASE = CAR_HEIGHT * 0.6;
+// const DUST_OFFSET_BEHIND_SPEED_SCALE = CAR_HEIGHT * 0.8;
+// const DUST_OFFSET_SPREAD = CAR_HEIGHT * 1.0;
 const MAX_EXPECTED_SCREEN_SPEED_PER_FRAME = 60; // Keep this high for now
+
 
 interface UseGameLoopProps {
     pixiRefs: React.RefObject<PixiRefs>;
@@ -39,6 +42,7 @@ interface UseGameLoopProps {
     // Use the unified InputVector type
     inputVector: InputVector; // Changed from { dx: number; dy: number }
     isPixiReady: boolean;
+    carHeight: number; // <-- Added carHeight prop
 }
 
 // Vortex is always a static animation at the item's last carried position (when scored)
@@ -54,6 +58,7 @@ export function useGameLoop({
     sendInput,
     inputVector,
     isPixiReady,
+    carHeight, // <-- Destructure carHeight prop
 }: UseGameLoopProps) {
     const mapTargetCenter = useRef<LngLat | null>(null);
     const initialPlacementDone = useRef(false);
@@ -75,6 +80,7 @@ export function useGameLoop({
     const inputVectorRef = useRef(inputVector);
     const isConnectedRef = useRef(isConnected);
     const sendInputRef = useRef(sendInput);
+    // const carHeightRef = useRef(carHeight); // No longer need a ref for carHeight
 
     // Effect to update refs when props change
     useEffect(() => {
@@ -84,7 +90,8 @@ export function useGameLoop({
         inputVectorRef.current = inputVector;
         isConnectedRef.current = isConnected;
         sendInputRef.current = sendInput;
-    }, [players, items, sessionId, inputVector, isConnected, sendInput]);
+        // carHeightRef.current = carHeight; // Don't update ref if not using one
+    }, [players, items, sessionId, inputVector, isConnected, sendInput]); // Removed carHeight dependency if not using ref
     // --------------------------------------------------
 
     // Load item texture once
@@ -94,7 +101,7 @@ export function useGameLoop({
             .then((source: GifSource) => {
                 itemSourceRef.current = source;
                 console.log("[useGameLoop] GIF source loaded for items.");
-            }).catch(err => {
+            }).catch((err: any) => { // Added type annotation
                 console.error("[useGameLoop] Error loading GIF source for item:", err);
             });
     }, []);
@@ -105,7 +112,7 @@ export function useGameLoop({
             .then((source: GifSource) => {
                 vortexSourceRef.current = source;
                 console.log("[useGameLoop] Vortex GIF source loaded.");
-            }).catch(err => {
+            }).catch((err: any) => { // Added type annotation
                 console.error("[useGameLoop] Error loading vortex GIF source:", err);
             });
     }, []);
@@ -114,9 +121,9 @@ export function useGameLoop({
     useEffect(() => {
         // Ensure PIXI.Assets exists and is ready
         if (PIXI.Assets) {
-             PIXI.Assets.load('/assets/car.svg').then(texture => {
+             PIXI.Assets.load('/assets/car.svg').then((texture: PIXI.Texture) => { // Added type annotation
                  carTextureRef.current = texture;
-             }).catch(err => {
+             }).catch((err: any) => { // Added type annotation
                  console.error("[useGameLoop] Error loading car texture:", err);
              });
         }
@@ -134,9 +141,17 @@ export function useGameLoop({
         const currentInputVector = inputVectorRef.current;
         const currentIsConnected = isConnectedRef.current;
         const currentSendInput = sendInputRef.current;
+        // const currentCarHeight = carHeightRef.current; // Access the height from the ref <-- REMOVED
+        // const currentArenaState = arenaStateRef.current; // Access arena state ref <-- REMOVED
+
+        // --- Calculate dynamic dust offsets based on carHeight prop ---
+        const currentCarHeight = carHeight; // Use the prop directly
+        const DUST_OFFSET_BEHIND_BASE = currentCarHeight * 0.6;
+        const DUST_OFFSET_BEHIND_SPEED_SCALE = currentCarHeight * 0.8;
+        const DUST_OFFSET_SPREAD = currentCarHeight * 1.0;
         // ------------------------------------
 
-        if (!app || !map || !refs || !currentSessionId) return; // Use ref value
+        if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return; // Use prop value & check validity
 
         const normalizedDeltaFactor = ticker.deltaMS / (1000 / 60);
         const lerpFactor = Math.min(INTERPOLATION_FACTOR * normalizedDeltaFactor, 1.0);
@@ -172,7 +187,7 @@ export function useGameLoop({
         }
 
         // --- Vortex effects on status change ---
-        currentItems.forEach(item => {
+        currentItems.forEach((item: FlagState) => { // Added type annotation
             const prevStatus = prevStatusesRef.current.get(item.id);
             const prevCarrierId = prevCarrierIdsRef.current.get(item.id) ?? undefined;
             if (prevStatus !== item.status && vortexSourceRef.current) {
@@ -195,7 +210,7 @@ export function useGameLoop({
                                 ? refs.carSprite
                                 : refs.otherPlayerSprites.current[vortexCarrierId];
                             if (carrier && carrierSpriteCandidate) {
-                                const distanceBehind = CAR_HEIGHT / 2 + 2;
+                                const distanceBehind = currentCarHeight / 2 + 2; // Use currentCarHeight
                                 const angle = carrierSpriteCandidate.rotation - Math.PI / 2;
                                 const offsetX = Math.cos(angle) * distanceBehind;
                                 const offsetY = Math.sin(angle) * distanceBehind;
@@ -252,7 +267,7 @@ export function useGameLoop({
 
         // --- Update active vortexes' screen positions and clean up destroyed ones ---
         if (map) {
-            activeVortexesRef.current = activeVortexesRef.current.filter(vortexObj => {
+            activeVortexesRef.current = activeVortexesRef.current.filter((vortexObj: ActiveVortex) => { // Added type annotation
                 const { sprite, worldX, worldY } = vortexObj;
                 if (sprite.destroyed) return false;
                 try {
@@ -267,11 +282,11 @@ export function useGameLoop({
         }
 
         // --- Create/Destroy Item Sprites ---
-        const currentItemIds = new Set(currentItems.map(item => item.id));
+        const currentItemIds = new Set(currentItems.map((item: FlagState) => item.id)); // Added type annotation
         const existingSpriteIds = new Set(refs.itemSprites.current.keys());
 
         // Create missing sprites
-        currentItems.forEach(item => { // Use ref value
+        currentItems.forEach((item: FlagState) => { // Use ref value, Added type annotation
             if (!refs.itemSprites.current.has(item.id)) {
                 if (itemSourceRef.current) {
                     // Create animated GIF sprite
@@ -321,7 +336,7 @@ export function useGameLoop({
                 // --- ADDED: Cleanup Dust Particles & Prev Pos ---
                 const dust = playerDustParticles.current[pSessionId];
                 if (dust) {
-                    dust.forEach(p => p.destroy());
+                    dust.forEach((p: PIXI.Graphics) => p.destroy()); // Added type annotation
                     delete playerDustParticles.current[pSessionId];
                 }
                 delete playerPrevScreenPos.current[pSessionId];
@@ -349,20 +364,41 @@ export function useGameLoop({
         }
 
         // --- Update Player Sprites ---
-        currentPlayers.forEach((playerState: Player, pSessionId: string) => { // Use ref value
+        currentPlayers.forEach((playerState: Player, pSessionId: string) => { // Added type annotation Player
             const isLocalPlayer = pSessionId === currentSessionId; // Use ref value
             let sprite = isLocalPlayer ? refs.carSprite : refs.otherPlayerSprites.current[pSessionId];
 
             // Create sprite if it doesn't exist (for remote players)
             if (!isLocalPlayer && !sprite && carTextureRef.current) {
-                sprite = new PIXI.Sprite(carTextureRef.current);
-                sprite.anchor.set(0.5);
-                sprite.width = CAR_WIDTH;
-                sprite.height = CAR_HEIGHT;
-                sprite.visible = false; // Initially hidden
-                sprite.zIndex = 10; // Ensure player sprite zIndex is set
-                app.stage.addChild(sprite);
-                refs.otherPlayerSprites.current[pSessionId] = sprite;
+              const texture = carTextureRef.current;
+              // Check texture dimensions
+              if (!texture || texture.width === 0 || texture.height === 0) {
+                console.error(
+                  "[useGameLoop] Cannot create remote player sprite: Invalid car texture."
+                );
+                return; // Skip this player if texture invalid
+              }
+              sprite = new PIXI.Sprite(texture);
+              sprite.anchor.set(0.5);
+
+              // Calculate scale based on desired height and texture height
+              const scale = currentCarHeight / texture.height; // Use currentCarHeight prop
+              // --- Logging (Remote Player Scale) ---
+              console.log(
+                `[useGameLoop Remote] Creating sprite for ${pSessionId}:` // Use pSessionId
+              ); // Use pSessionId
+              console.log(
+                `  -> Texture H: ${texture.height}, Target H: ${currentCarHeight}, Calculated Scale: ${scale}`
+              ); // Use currentCarHeight prop
+              // --- END Logging ---
+              sprite.scale.set(scale); // Apply uniform scale
+
+              sprite.tint = playerState.team === "Red" ? 0xff0000 : 0x0000ff;
+              sprite.x = -1000;
+              sprite.y = -1000;
+              sprite.zIndex = 10; // Ensure players are above bases/items
+              app.stage.addChild(sprite);
+              refs.otherPlayerSprites.current[pSessionId] = sprite;
             }
 
             if (!sprite) return; // Skip if sprite still couldn't be created/found
@@ -425,17 +461,17 @@ export function useGameLoop({
 
                         // Position particles (using speed for offset)
                         const factor = speedFactor;
-                        const currentDustOffsetBehind = DUST_OFFSET_BEHIND_BASE + factor * DUST_OFFSET_BEHIND_SPEED_SCALE;
+                        const currentDustOffsetBehind = DUST_OFFSET_BEHIND_BASE + factor * DUST_OFFSET_BEHIND_SPEED_SCALE; // Use calculated offsets
 
-                        dustParticles.forEach((particle, i) => {
+                        dustParticles.forEach((particle: PIXI.Graphics, i: number) => { // Added type annotations
                             let localX = 0;
                             const localY = currentDustOffsetBehind; // Y is 'behind' in local space
 
                             // Spread particles: 0=center, 1=left, 2=right
                             if (i === 1) { // Left particle (negative X in local space)
-                                localX = -DUST_OFFSET_SPREAD * 0.75;
+                                localX = -DUST_OFFSET_SPREAD * 0.75; // Use calculated offset
                             } else if (i === 2) { // Right particle (positive X in local space)
-                                localX = DUST_OFFSET_SPREAD * 0.75;
+                                localX = DUST_OFFSET_SPREAD * 0.75; // Use calculated offset
                             }
                             // Particle 0 stays at localX = 0
 
@@ -463,7 +499,7 @@ export function useGameLoop({
 
                     const particlesToCheck = dustParticles || playerDustParticles.current[pSessionId]; // Use created or existing ref
                     if (particlesToCheck) {
-                        particlesToCheck.forEach(particle => {
+                        particlesToCheck.forEach((particle: PIXI.Graphics) => { // Added type annotation
                             particle.visible = shouldBeVisible;
                         });
                     }
@@ -473,13 +509,13 @@ export function useGameLoop({
                     sprite.visible = false;
                     // Also hide dust particles on error
                     const dust = playerDustParticles.current[pSessionId];
-                    if (dust) dust.forEach(p => { p.visible = false; }); // Ensure hide on error
+                    if (dust) dust.forEach((p: PIXI.Graphics) => { p.visible = false; }); // Ensure hide on error, Added type annotation
                  }
             } else {
                  sprite.visible = false;
                  // Also hide dust particles if player state is invalid
                  const dust = playerDustParticles.current[pSessionId];
-                 if (dust) dust.forEach(p => { p.visible = false; }); // Ensure hide on error
+                 if (dust) dust.forEach((p: PIXI.Graphics) => { p.visible = false; }); // Ensure hide on error, Added type annotation
             }
 
             // Update previous position *after* using it and updating sprite
@@ -488,7 +524,7 @@ export function useGameLoop({
 
         // --- Update Item Sprites ---
         let scoredCount = 0;
-        currentItems.forEach(itemState => { // Use ref value
+        currentItems.forEach((itemState: FlagState) => { // Use ref value, Added type annotation
             const sprite = refs.itemSprites.current.get(itemState.id);
             if (!sprite) return;
 
@@ -506,7 +542,7 @@ export function useGameLoop({
                     : refs.otherPlayerSprites.current[itemState.carrierId];
 
                 if (carrier && carrierSprite && carrierSprite.visible) {
-                    const distanceBehind = CAR_HEIGHT / 2 + 2; // bring closer to car
+                    const distanceBehind = currentCarHeight / 2 + 2; // bring closer to car, use currentCarHeight prop
                     const angle = carrierSprite.rotation - Math.PI / 2;
                     const offsetX = Math.cos(angle) * distanceBehind;
                     const offsetY = Math.sin(angle) * distanceBehind;
@@ -582,7 +618,7 @@ export function useGameLoop({
             let arrowColor: number = 0xFFFFFF;
             let minTargetDistSq = Infinity;
 
-            const playerCarryingItem = currentItems.find(item => item.carrierId === currentSessionId); // Use ref values
+            const playerCarryingItem = currentItems.find((item: FlagState) => item.carrierId === currentSessionId); // Use ref values, Added type annotation
 
             if (playerCarryingItem) {
                 // Player is carrying: Target own base
@@ -592,7 +628,7 @@ export function useGameLoop({
                 arrowColor = localPlayerState.team === 'Red' ? 0xff0000 : 0x0000ff;
             } else {
                 // Target nearest available/dropped item
-                currentItems.forEach(item => { // Use ref value
+                currentItems.forEach((item: FlagState) => { // Use ref value, Added type annotation
                     if ((item.status === 'available' || item.status === 'dropped') && isFinite(item.x) && isFinite(item.y)) {
                         const dSq = distSq(localPlayerState.x, localPlayerState.y, item.x, item.y);
                         if (dSq < minTargetDistSq) {
@@ -607,7 +643,7 @@ export function useGameLoop({
                 // If no available item, target nearest opponent carrier
                 if (targetWorldX === null) {
                     minTargetDistSq = Infinity;
-                    currentItems.forEach(item => { // Use ref value
+                    currentItems.forEach((item: FlagState) => { // Use ref value, Added type annotation
                         if (item.status === 'carried' && item.carrierId) {
                              const carrier = currentPlayers.get(item.carrierId); // Use ref value
                              if (carrier && carrier.team !== localPlayerState.team && isFinite(carrier.x) && isFinite(carrier.y)) {
@@ -657,7 +693,7 @@ export function useGameLoop({
         }
 
     // Stabilize dependencies: only fundamental refs needed
-    }, [pixiRefs, mapInstance]); // REMOVED dependencies that change often
+    }, [pixiRefs, mapInstance, carHeight]); // REMOVED dependencies that change often, ADDED carHeight dependency
 
     // Effect to add/remove ticker
     useEffect(() => {
@@ -666,7 +702,7 @@ export function useGameLoop({
         if (app?.ticker && isPixiReady) {
             try {
                 app.ticker.add(gameLoop);
-            } catch (err) {
+            } catch (err: any) { // Added type annotation
                 console.error("[useGameLoop] Error adding game loop to ticker:", err);
             }
 
@@ -676,7 +712,7 @@ export function useGameLoop({
                  if (app?.ticker) {
                     try {
                         app.ticker.remove(gameLoop);
-                    } catch (err) {
+                    } catch (err: any) { // Added type annotation
                          console.error("[useGameLoop] Error removing game loop from ticker:", err);
                     }
                  }

@@ -8,13 +8,14 @@ import { useInputManager } from '../hooks/useInputManager';
 import { useMapLibre } from '../hooks/useMapLibre';
 import { usePixiApp } from '../hooks/usePixiApp'; // Keep PixiRefs for type safety
 import { useGameLoop } from '../hooks/useGameLoop';
+import { CAR_HEIGHT } from '@smugglers-town/shared-utils'; // <-- ADD THIS IMPORT
 
 // Map and Style
 // Use a default style ID initially, will be refactored to read from env/state
 const DEFAULT_MAP_STYLE_ID = 'streets-v2';
 
 // --- Visual Constants ---
-const CAR_HEIGHT = 75; // Define only the height
+// const CAR_HEIGHT = 75; // Define only the height <-- REMOVE THIS LINE
 
 // --- Component ---
 const GameCanvas: React.FC = () => {

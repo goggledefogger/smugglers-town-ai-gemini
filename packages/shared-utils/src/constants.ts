@@ -26,6 +26,7 @@ export const PLAYER_TURN_SPEED = Math.PI * 1.5; // radians per second
 // Player Dimensions (used for physics and rendering hints)
 export const PLAYER_EFFECTIVE_RADIUS = 2.0; // meters
 export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for server collision checks)
+export const CAR_HEIGHT = 75; // Client-side rendering height (pixels, relative to zoom)
 
 // Game Items / Flags
-export const FLAG_COUNT = 3;
+export const VISUAL_BASE_RADIUS = 30; // World radius (meters) used for client-side rendering calculation.

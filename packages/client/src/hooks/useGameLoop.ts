@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
-import { lerp, angleLerp, worldToGeo } from '@smugglers-town/shared-utils';
+import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
 import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar
 import { RED_BASE_POS, BLUE_BASE_POS, distSq } from "@smugglers-town/shared-utils"; // Import shared constants AND distSq
+import 'pixi.js/gif';
+import { Assets } from 'pixi.js';
+import { GifSprite, GifSource } from 'pixi.js/gif';
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
@@ -25,6 +28,9 @@ interface UseGameLoopProps {
     isPixiReady: boolean;
 }
 
+// Vortex is always a static animation at the item's last carried position (when scored)
+type ActiveVortex = { sprite: GifSprite; worldX: number; worldY: number };
+
 export function useGameLoop({
     pixiRefs,
     mapInstance,
@@ -38,7 +44,14 @@ export function useGameLoop({
 }: UseGameLoopProps) {
     const mapTargetCenter = useRef<LngLat | null>(null);
     const initialPlacementDone = useRef(false);
-    const itemTextureRef = useRef<PIXI.Texture | null>(null);
+    const itemSourceRef = useRef<GifSource | null>(null);
+    const carTextureRef = useRef<PIXI.Texture | null>(null);
+    const vortexSourceRef = useRef<GifSource | null>(null);
+    const prevStatusesRef = useRef<Map<string, string>>(new Map());
+    // Track previous carrierId for each item
+    const prevCarrierIdsRef = useRef<Map<string, string | undefined>>(new Map());
+    // Track active vortexes for animation and position updates
+    const activeVortexesRef = useRef<ActiveVortex[]>([]);
 
     // --- Refs for frequently changing state/props ---
     const playersRef = useRef(players);
@@ -61,12 +74,35 @@ export function useGameLoop({
 
     // Load item texture once
     useEffect(() => {
+        // Load smoking_toilet.gif as a GifSource for animation
+        Assets.load('/assets/smoking_toilet.gif')
+            .then((source: GifSource) => {
+                itemSourceRef.current = source;
+                console.log("[useGameLoop] GIF source loaded for items.");
+            }).catch(err => {
+                console.error("[useGameLoop] Error loading GIF source for item:", err);
+            });
+    }, []);
+
+    // Load vortex texture once
+    useEffect(() => {
+        Assets.load('/assets/vortex.gif')
+            .then((source: GifSource) => {
+                vortexSourceRef.current = source;
+                console.log("[useGameLoop] Vortex GIF source loaded.");
+            }).catch(err => {
+                console.error("[useGameLoop] Error loading vortex GIF source:", err);
+            });
+    }, []);
+
+    // Load car texture once
+    useEffect(() => {
         // Ensure PIXI.Assets exists and is ready
         if (PIXI.Assets) {
-             PIXI.Assets.load('/assets/golden-toilet.svg').then(texture => {
-                 itemTextureRef.current = texture;
+             PIXI.Assets.load('/assets/car.svg').then(texture => {
+                 carTextureRef.current = texture;
              }).catch(err => {
-                 console.error("[useGameLoop] Error loading item texture:", err);
+                 console.error("[useGameLoop] Error loading car texture:", err);
              });
         }
     }, []);
@@ -120,19 +156,147 @@ export function useGameLoop({
             mapTargetCenter.current = null;
         }
 
+        // --- Vortex effects on status change ---
+        currentItems.forEach(item => {
+            const prevStatus = prevStatusesRef.current.get(item.id);
+            const prevCarrierId = prevCarrierIdsRef.current.get(item.id) ?? undefined;
+            if (prevStatus !== item.status && vortexSourceRef.current) {
+                // when item is scored
+                if (item.status === 'scored') {
+                    try {
+                        let worldX = item.x;
+                        let worldY = item.y;
+                        let vortexCarrierId = (item.carrierId ?? undefined) || (prevStatus === 'carried' ? prevCarrierId : undefined);
+                        let toiletWorldX = worldX;
+                        let toiletWorldY = worldY;
+                        const vortex = new GifSprite({ source: vortexSourceRef.current, autoPlay: true, loop: false });
+                        vortex.anchor.set(0.5);
+                        vortex.scale.set(0.5);
+                        vortex.position.set(-1000, -1000); // Will be updated every frame
+                        app.stage.addChild(vortex);
+                        if (vortexCarrierId) {
+                            const carrier = currentPlayers.get(vortexCarrierId);
+                            const carrierSpriteCandidate = vortexCarrierId === currentSessionId
+                                ? refs.carSprite
+                                : refs.otherPlayerSprites.current[vortexCarrierId];
+                            if (carrier && carrierSpriteCandidate) {
+                                const distanceBehind = CAR_HEIGHT / 2 + 2;
+                                const angle = carrierSpriteCandidate.rotation - Math.PI / 2;
+                                const offsetX = Math.cos(angle) * distanceBehind;
+                                const offsetY = Math.sin(angle) * distanceBehind;
+                                // The last known position of the toilet when carried
+                                const toiletScreenX = carrierSpriteCandidate.x + offsetX;
+                                const toiletScreenY = carrierSpriteCandidate.y + offsetY;
+                                // Convert screen position to geo, then to world coordinates
+                                let vortexWorld = { x: toiletWorldX, y: toiletWorldY };
+                                if (map) {
+                                    try {
+                                        const lngLat = map.unproject([toiletScreenX, toiletScreenY]);
+                                        vortexWorld = geoToWorld(lngLat.lng, lngLat.lat);
+                                    } catch (e) {}
+                                }
+                                // DEBUG LOGGING
+                                console.log('[VORTEX DEBUG] Spawning vortex at toilet return location:', {
+                                    itemId: item.id,
+                                    vortexCarrierId,
+                                    toiletWorld: vortexWorld,
+                                    toiletScreen: { x: toiletScreenX, y: toiletScreenY }
+                                });
+                                activeVortexesRef.current.push({ sprite: vortex, worldX: vortexWorld.x, worldY: vortexWorld.y });
+                            } else if (carrier) {
+                                toiletWorldX = carrier.x;
+                                toiletWorldY = carrier.y;
+                                console.log('[VORTEX DEBUG] Spawning vortex for scored carried item (carrier, no sprite, using previous carrierId):', {
+                                    itemId: item.id,
+                                    vortexCarrierId,
+                                    carrierWorld: { x: carrier.x, y: carrier.y }
+                                });
+                                activeVortexesRef.current.push({ sprite: vortex, worldX: toiletWorldX, worldY: toiletWorldY });
+                            } else {
+                                // fallback
+                                activeVortexesRef.current.push({ sprite: vortex, worldX: toiletWorldX, worldY: toiletWorldY });
+                            }
+                        } else {
+                            // Not carried, just use item's world position
+                            console.log('[VORTEX DEBUG] Spawning vortex for scored item (not carried):', {
+                                itemId: item.id,
+                                worldX: toiletWorldX, worldY: toiletWorldY
+                            });
+                            activeVortexesRef.current.push({ sprite: vortex, worldX: toiletWorldX, worldY: toiletWorldY });
+                        }
+                        vortex.onComplete = () => { vortex.destroy(); };
+                    } catch (e) {
+                        console.error('[useGameLoop] Error spawning scored vortex:', e);
+                    }
+                }
+                // when item reappears (new round)
+                else if (prevStatus === 'scored' && (item.status === 'available' || item.status === 'dropped')) {
+                    try {
+                        const worldX = item.x;
+                        const worldY = item.y;
+                        const vortex = new GifSprite({ source: vortexSourceRef.current, autoPlay: true, loop: false });
+                        vortex.anchor.set(0.5);
+                        vortex.scale.set(0.5);
+                        vortex.position.set(-1000, -1000); // Will be updated every frame
+                        app.stage.addChild(vortex);
+                        activeVortexesRef.current.push({ sprite: vortex, worldX, worldY });
+                        vortex.onComplete = () => { vortex.destroy(); };
+                    } catch (e) {
+                        console.error('[useGameLoop] Error spawning spawn vortex:', e);
+                    }
+                }
+            }
+            // Update previous carrierId for next frame
+            prevCarrierIdsRef.current.set(item.id, item.carrierId ?? undefined);
+            prevStatusesRef.current.set(item.id, item.status);
+        });
+
+        // --- Update active vortexes' screen positions and clean up destroyed ones ---
+        if (map) {
+            activeVortexesRef.current = activeVortexesRef.current.filter(vortexObj => {
+                const { sprite, worldX, worldY } = vortexObj;
+                if (sprite.destroyed) return false;
+                try {
+                    const [lng, lat] = worldToGeo(worldX, worldY);
+                    const screenPos = map.project([lng, lat]);
+                    sprite.position.set(screenPos.x, screenPos.y);
+                } catch (e) {
+                    sprite.visible = false;
+                }
+                return true;
+            });
+        }
+
         // --- Create/Destroy Item Sprites ---
-        const currentItemIds = new Set(currentItems.map(item => item.id)); // Use ref value
+        const currentItemIds = new Set(currentItems.map(item => item.id));
         const existingSpriteIds = new Set(refs.itemSprites.current.keys());
 
         // Create missing sprites
         currentItems.forEach(item => { // Use ref value
-            if (!refs.itemSprites.current.has(item.id) && itemTextureRef.current) {
-                const newItemSprite = new PIXI.Sprite(itemTextureRef.current);
-                newItemSprite.anchor.set(0.5);
-                newItemSprite.scale.set(0.5); // Adjust scale as needed
-                newItemSprite.x = -1000; newItemSprite.y = -1000; newItemSprite.visible = false;
-                app.stage.addChild(newItemSprite);
-                refs.itemSprites.current.set(item.id, newItemSprite);
+            if (!refs.itemSprites.current.has(item.id)) {
+                if (itemSourceRef.current) {
+                    // Create animated GIF sprite
+                    const newItemSprite = new GifSprite({
+                        source: itemSourceRef.current,
+                        autoPlay: true,
+                        loop: true,
+                        animationSpeed: 1
+                    });
+                    newItemSprite.anchor.set(0.5, 1.0); // Anchor at bottom center for better offset
+                    newItemSprite.scale.set(0.5); // Scale down to half size for item sprite
+                    newItemSprite.x = -1000; newItemSprite.y = -1000; newItemSprite.visible = false;
+                    app.stage.addChild(newItemSprite);
+                    refs.itemSprites.current.set(item.id, newItemSprite);
+                    console.log(`[DEBUG] Created item sprite for id=${item.id}`);
+                } else {
+                    // Fallback: create a red circle if texture missing
+                    const gfx = new PIXI.Graphics();
+                    gfx.circle(0, 0, 30).fill(0xff0000);
+                    gfx.x = -1000; gfx.y = -1000; gfx.visible = false;
+                    app.stage.addChild(gfx);
+                    refs.itemSprites.current.set(item.id, gfx as unknown as PIXI.Sprite);
+                    console.warn(`[DEBUG] Created fallback red circle for item id=${item.id}`);
+                }
             }
         });
 
@@ -172,9 +336,13 @@ export function useGameLoop({
         currentPlayers.forEach((playerState: Player, pSessionId: string) => { // Use ref value
             if (pSessionId === currentSessionId) return; // Use ref value
             if (!refs.otherPlayerSprites.current[pSessionId]) {
-                const sprite = new PIXI.Graphics();
-                drawCar(sprite, playerState.team);
+                // Use SVG car texture for all cars
+                if (!carTextureRef.current) return;
+                const sprite = new PIXI.Sprite(carTextureRef.current);
+                sprite.anchor.set(0.5);
                 sprite.x = -1000; sprite.y = -1000; sprite.visible = false;
+                // Tint for team color
+                sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
                 app.stage.addChild(sprite);
                 refs.otherPlayerSprites.current[pSessionId] = sprite;
             }
@@ -201,8 +369,8 @@ export function useGameLoop({
 
                      const targetRotation = -playerState.heading + Math.PI / 2;
 
-                     // Update color if needed (might have changed on join/reconnect)
-                     drawCar(sprite, playerState.team);
+                     // Tint for team color
+                     sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
 
                      if (!initialPlacementDone.current) { // Place directly before initial placement
                           sprite.x = targetScreenPos.x;
@@ -235,17 +403,14 @@ export function useGameLoop({
             if (itemState.status === 'scored') {
                 scoredCount++;
                 shouldBeVisible = false; // Hide scored items for now
-                // Or maybe render them faded at the base?
-                // For now, just hide and count.
             } else if (itemState.status === 'carried' && itemState.carrierId) {
-                const carrier = currentPlayers.get(itemState.carrierId); // Use ref value
-                const carrierSprite = itemState.carrierId === currentSessionId // Use ref value
+                const carrier = currentPlayers.get(itemState.carrierId);
+                const carrierSprite = itemState.carrierId === currentSessionId
                     ? refs.carSprite
                     : refs.otherPlayerSprites.current[itemState.carrierId];
 
                 if (carrier && carrierSprite && carrierSprite.visible) {
-                    // Position relative to carrier
-                    const distanceBehind = CAR_HEIGHT / 2 + 5;
+                    const distanceBehind = CAR_HEIGHT / 2 + 2; // bring closer to car
                     const angle = carrierSprite.rotation - Math.PI / 2;
                     const offsetX = Math.cos(angle) * distanceBehind;
                     const offsetY = Math.sin(angle) * distanceBehind;

@@ -12,6 +12,9 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Keyboard controls (WASD/Arrows) for vehicle movement.
 - Meter-based coordinate system on the server, translated to GeoJSON for map display.
 - Client converts server coordinates to GeoJSON, uses MapLibre projection for Pixi sprite placement, and handles initial synchronization on refresh.
+- Car sprites loaded from a single SVG asset, dynamically rotated to match heading and tinted by team color.
+- Animated toilet item sprites using the smoking_toilet.gif and PixiJS GIF plugin, including collision pickup and carry visuals.
+- Vortex visual effect for scored toilets now appears at the exact location where the toilet was returned (using the last carried position), not at the center of the base or attached to the car.
 - Basic client-server structure with TypeScript on both ends.
 - Team assignment with persistence across refreshes (per browser tab).
 - Initial state definition for scores and a single generic pickup item.
@@ -25,7 +28,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Client-side prediction for improved input responsiveness.
 - Simple AI opponents.
 - Improved HUD with game state display (timer, etc.).
-- Refined visuals (Golden Toilet item, smoke effects) and sound effects.
+- Sound effects.
 - Shared code strategy (monorepo or shared package) to avoid schema duplication.
 - Deployment configuration.
 

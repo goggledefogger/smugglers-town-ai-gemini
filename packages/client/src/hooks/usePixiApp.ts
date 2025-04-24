@@ -13,8 +13,8 @@ interface UsePixiAppProps {
 
 export interface PixiRefs {
     app: PIXI.Application | null;
-    carSprite: PIXI.Graphics | null;
-    otherPlayerSprites: React.MutableRefObject<{ [sessionId: string]: PIXI.Graphics }>;
+    carSprite: PIXI.Sprite | null;
+    otherPlayerSprites: React.MutableRefObject<{ [sessionId: string]: PIXI.Sprite }>;
     itemSprites: React.MutableRefObject<Map<string, PIXI.Sprite>>;
     redBaseSprite: PIXI.Graphics | null;
     blueBaseSprite: PIXI.Graphics | null;
@@ -74,14 +74,16 @@ export function usePixiApp({ pixiContainerRef, onPixiReady }: UsePixiAppProps): 
 
                 console.log("[usePixiApp] Setting up Pixi stage...");
 
-                // Create placeholder car sprite
-                const carGfx = new PIXI.Graphics();
-                carGfx.pivot.set(CAR_WIDTH / 2, CAR_HEIGHT / 2);
-                carGfx.x = -1000; carGfx.y = -1000;
-                carGfx.visible = false;
-                app.stage.addChild(carGfx);
-                pixiRefs.current.carSprite = carGfx;
-                console.log("[usePixiApp] Car sprite placeholder added.");
+                // Create car sprite for local player (SVG texture)
+                const carTexture = await PIXI.Assets.load('/assets/car.svg');
+                const carSprite = new PIXI.Sprite(carTexture);
+                carSprite.anchor.set(0.5);
+                carSprite.scale.set(1); // Scale down to match intended car size
+                carSprite.x = -1000; carSprite.y = -1000;
+                carSprite.visible = false;
+                app.stage.addChild(carSprite);
+                pixiRefs.current.carSprite = carSprite;
+                console.log("[usePixiApp] Car sprite (SVG) added.");
 
                 // Initialize Item Sprites Map (texture preloading done here)
                 pixiRefs.current.itemSprites.current = new Map<string, PIXI.Sprite>();

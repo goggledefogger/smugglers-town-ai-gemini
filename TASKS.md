@@ -43,6 +43,8 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Tune collision radius for better feel (set to 1.5m)
 - [x] Allow item transfer on collision between teammates (removed team check)
 - [x] Implement initial client-side UI design system using Tailwind CSS (panels, buttons)
+- [x] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
+- [x] Fix vortex visual effect to appear at the precise location where the toilet was returned (scored), not at the center of the base or attached to the car
 
 ## In Progress Tasks
 
@@ -50,8 +52,8 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 ## Future Tasks
 
-- [ ] Refine player/item sprite graphics/animations
-- [ ] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
+- [x] Refine player/item sprite graphics/animations
+- [x] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)
 - [ ] Deployment configuration (client and server)
@@ -73,6 +75,7 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates, **and rendering UI components (HUD, AIControls)**. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
 - ✅ `client/src/components/HUD.tsx`: Displays game scores.
 - ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players.
+- ✅ `client/src/components/MapStyleSelector.tsx`: UI component for selecting map styles.
 - ✅ `client/src/hooks/...`: Various hooks for Colyseus connection, input, map, Pixi app, and game loop logic.
 - ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules).
 - ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
@@ -90,3 +93,5 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `.env`: Environment variables
 - ✅ `.gitignore`: **Includes build artifacts like .tsbuildinfo.**
 - ✅ `TASKS.md`: This file.
+
+Vortex visual effect: When a toilet is scored, the vortex animation is spawned at the exact world position where the toilet was returned (using the last carried position), and remains static there. This ensures the effect is visually accurate and not attached to the car or base center.

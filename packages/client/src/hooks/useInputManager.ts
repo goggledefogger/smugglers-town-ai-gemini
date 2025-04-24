@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useKeyboardInput, KeyboardInputVector } from './useKeyboardInput';
-import { useGamepadInput, GamepadInputVector } from './useGamepadInput';
+import { useKeyboardInput } from './useKeyboardInput';
+import { useGamepadInput } from './useGamepadInput';
 
 // Unified Input Vector type
 export interface InputVector {

@@ -3,7 +3,7 @@ import * as PIXI from 'pixi.js';
 import { Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
-import { PixiRefs, drawCar } from './usePixiApp'; // Import refs type and drawCar
+import { PixiRefs } from './usePixiApp'; // Removed unused drawCar import
 import { RED_BASE_POS, BLUE_BASE_POS, distSq } from "@smugglers-town/shared-utils"; // Import shared constants AND distSq
 import 'pixi.js/gif';
 import { Assets } from 'pixi.js';

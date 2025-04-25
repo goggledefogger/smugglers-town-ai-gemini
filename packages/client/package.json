@@ -24,9 +24,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",
-    "@types/maplibre-gl": "^1.14.0",
     "@types/node": "^20.14.2",
-    "@types/pixi.js": "^5.0.0",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@typescript-eslint/eslint-plugin": "^7.2.0",

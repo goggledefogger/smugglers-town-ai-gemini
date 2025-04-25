@@ -70,13 +70,10 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
                         if (mapInstance) {
                             mapInstance.once('moveend', () => {
                                 console.log("[LocationSearch] Control's flyTo animation finished (moveend).");
-                                // Set the desired zoom level *after* the animation
                                 const desiredZoom = 19;
                                 mapInstance.setZoom(desiredZoom);
-                                console.log(`[LocationSearch] Manually set zoom to ${desiredZoom} after moveend.`);
-
                                 if (onNavigationFinished) {
-                                    onNavigationFinished(); // Signal that navigation is done
+                                    onNavigationFinished();
                                 }
                             });
                         }

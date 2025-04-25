@@ -28,10 +28,10 @@ const MapStyleSelector: React.FC<MapStyleSelectorProps> = ({
   const baseButtonStyle = "block w-full text-left px-2 py-1 rounded transition-colors duration-150";
 
   return (
-    // Use inline style for position, Tailwind for the rest
+    // REMOVED inline style for position, rely on parent container
     <div
-      style={{ position: 'absolute', top: '8rem', right: '1rem' }} // Position below AI Controls
-      className="p-2 bg-gray-800 bg-opacity-70 rounded text-white text-xs space-y-1 shadow-md z-30"
+      // style={{ position: 'absolute', top: '8rem', right: '1rem' }} // Position below AI Controls
+      className="p-2 rounded text-white text-xs space-y-1 shadow-md z-30 w-full" // Removed bg-gray-800 bg-opacity-70
     >
       <span className="block font-bold mb-1">Map Style:</span>
       {availableStyles.map((style) => (
@@ -39,7 +39,7 @@ const MapStyleSelector: React.FC<MapStyleSelectorProps> = ({
           key={style.id}
           onClick={() => onStyleChange(style.id)}
           // Apply base button style and conditional active style
-          className={`${baseButtonStyle} ${ 
+          className={`${baseButtonStyle} ${
             currentStyleId === style.id
               ? 'bg-blue-600 font-semibold' // Active state
               : 'bg-gray-700 hover:bg-gray-600' // Default state
@@ -52,4 +52,4 @@ const MapStyleSelector: React.FC<MapStyleSelectorProps> = ({
   );
 };
 
-export default MapStyleSelector; 
+export default MapStyleSelector;

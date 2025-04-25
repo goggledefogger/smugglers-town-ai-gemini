@@ -16,3 +16,96 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* --- MapTiler Geocoding Control Transparency Override --- */
+
+/* Apply default background and hover transition directly to the geocoder container */
+.maplibregl-ctrl-geocoder,
+.mapboxgl-ctrl-geocoder {
+  background-color: rgba(30, 41, 59, 0.2) !important; /* Default: Slate-800 @ 20% */
+  transition: background-color 0.5s ease, color 0.5s ease !important; /* Added color transition */
+  box-shadow: none !important;
+}
+.maplibregl-ctrl-geocoder:hover,
+.mapboxgl-ctrl-geocoder:hover {
+  background-color: rgba(255, 255, 255, 0.85) !important; /* Light background on hover */
+}
+
+/* Keep nested form and input-group transparent */
+.maplibregl-ctrl-geocoder form,
+.mapboxgl-ctrl-geocoder form,
+.maplibregl-ctrl-geocoder .input-group,
+.mapboxgl-ctrl-geocoder .input-group {
+  background-color: transparent !important;
+  /* box-shadow: none !important; (Inherited or not needed) */
+}
+
+/* Target the input field specifically */
+.maplibregl-ctrl-geocoder input[type="text"],
+.mapboxgl-ctrl-geocoder input[type="text"] {
+  background-color: transparent !important; /* Keep input transparent */
+  color: white !important; /* Default white text */
+  transition: color 0.5s ease !important; /* Add transition for text color */
+}
+.maplibregl-ctrl-geocoder input[type="text"]::placeholder,
+.mapboxgl-ctrl-geocoder input[type="text"]::placeholder {
+    color: rgba(255, 255, 255, 0.6) !important; /* Default placeholder */
+    transition: color 0.5s ease !important;
+}
+/* Change input text color on container hover */
+.maplibregl-ctrl-geocoder:hover input[type="text"],
+.mapboxgl-ctrl-geocoder:hover input[type="text"] {
+  color: #333 !important; /* Dark text on hover */
+}
+.maplibregl-ctrl-geocoder:hover input[type="text"]::placeholder,
+.mapboxgl-ctrl-geocoder:hover input[type="text"]::placeholder {
+    color: rgba(51, 51, 51, 0.6) !important; /* Darker placeholder */
+}
+
+/* Target the buttons and icons (keep styling) */
+.maplibregl-ctrl-geocoder button,
+.mapboxgl-ctrl-geocoder button {
+    background-color: transparent !important;
+    border: none !important;
+}
+.maplibregl-ctrl-geocoder button svg,
+.mapboxgl-ctrl-geocoder button svg {
+   fill: rgba(255, 255, 255, 0.7) !important; /* Default white icons */
+   stroke: rgba(255, 255, 255, 0.7) !important;
+   transition: fill 0.5s ease, stroke 0.5s ease !important;
+}
+/* Change button/icon colors on container hover */
+.maplibregl-ctrl-geocoder:hover button svg,
+.mapboxgl-ctrl-geocoder:hover button svg {
+   fill: rgba(51, 51, 51, 0.7) !important; /* Dark icons on hover */
+   stroke: rgba(51, 51, 51, 0.7) !important;
+}
+.maplibregl-ctrl-geocoder .maplibregl-ctrl-geocoder--icon-loading svg,
+.mapboxgl-ctrl-geocoder .mapboxgl-ctrl-geocoder--icon-loading svg {
+   /* Inherits fill/stroke from button svg */
+}
+.maplibregl-ctrl-geocoder:hover .maplibregl-ctrl-geocoder--icon-loading svg,
+.mapboxgl-ctrl-geocoder:hover .mapboxgl-ctrl-geocoder--icon-loading svg {
+    /* Inherits fill/stroke from hovered button svg */
+}
+
+
+/* Style the suggestions dropdown (keep styling) */
+.maplibregl-ctrl-geocoder .suggestions,
+.mapboxgl-ctrl-geocoder .suggestions {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  color: white !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.maplibregl-ctrl-geocoder .suggestions > .active > a,
+.mapboxgl-ctrl-geocoder .suggestions > .active > a {
+  background-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+.maplibregl-ctrl-geocoder .suggestions > li > a:hover,
+.mapboxgl-ctrl-geocoder .suggestions > li > a:hover {
+    background-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* --- End Geocoding Override --- */

@@ -1,32 +1,76 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import HUD from '../components/HUD'; // <-- Use default import
-import AIControls from '../components/AIControls'; // <-- Use default import
-import MapStyleSelector from '../components/MapStyleSelector'; // <-- ADDED
-import { useColyseus } from '../hooks/useColyseus';
-import { useInputManager } from '../hooks/useInputManager';
-import { useMapLibre } from '../hooks/useMapLibre';
-import { usePixiApp } from '../hooks/usePixiApp'; // Keep PixiRefs for type safety
-import { useGameLoop } from '../hooks/useGameLoop';
-import { CAR_HEIGHT } from '@smugglers-town/shared-utils'; // <-- ADD THIS IMPORT
+import { Player, FlagState } from '@smugglers-town/shared-schemas';
+import * as maplibregl from 'maplibre-gl'; // Keep for Map type if needed
 
-// Map and Style
-// Use a default style ID initially, will be refactored to read from env/state
+// Hooks
+import { useMapLibre } from '../hooks/useMapLibre';
+import { usePixiApp, PixiRefs } from '../hooks/usePixiApp';
+import { useColyseus, UseColyseusReturn } from '../hooks/useColyseus';
+import { useInputManager, InputVector } from '../hooks/useInputManager';
+import { useGameLoop } from '../hooks/useGameLoop';
+import { useDustParticles } from '../hooks/useDustParticles';
+
+// Components (using default imports)
+import HUD from '../components/HUD';
+import AIControls from '../components/AIControls';
+import MapStyleSelector from '../components/MapStyleSelector'; // Assuming it uses props based on useMapLibre/useColyseus
+import { LocationSearch } from '../components/LocationSearch';
+import { FloatingPanel } from '../components/FloatingPanel';
+// Removed DebugInfoPanel and ObjectiveArrow imports
+
+// Constants
+import { CAR_HEIGHT } from '@smugglers-town/shared-utils';
+const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY; // Get API Key directly from env
+
+// Map Style Definitions (Example - manage centrally if complex)
+interface MapStyle {
+    id: string;
+    name: string;
+    url: string; // Assuming full URL is needed or derivable
+}
+const buildStyleUrl = (id: string) => `https://api.maptiler.com/maps/${id}/style.json?key=${API_KEY}`;
+
+const availableMapStyles: MapStyle[] = [
+    { id: 'streets-v2', name: 'Streets', url: buildStyleUrl('streets-v2') },
+    { id: 'hybrid', name: 'Satellite', url: buildStyleUrl('hybrid') },
+    { id: 'basic-v2', name: 'Basic', url: buildStyleUrl('basic-v2') },
+    { id: 'outdoor-v2', name: 'Outdoor', url: buildStyleUrl('outdoor-v2') },
+    { id: 'streets-v2-dark', name: 'Streets Dark', url: buildStyleUrl('streets-v2-dark') },
+];
 const DEFAULT_MAP_STYLE_ID = 'streets-v2';
 
-// --- Visual Constants ---
-// const CAR_HEIGHT = 75; // Define only the height <-- REMOVE THIS LINE
-
-// --- Component ---
-const GameCanvas: React.FC = () => {
-    // Refs for DOM containers
+export function GameCanvas() {
+    // --- Refs --- (Keep separate from state if not causing re-renders)
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const pixiContainerRef = useRef<HTMLDivElement>(null);
+    const hudWrapperRef = useRef<HTMLDivElement>(null);
 
-    // --- Hooks ---
+    // --- State --- (Causes re-renders when changed)
+    const [currentMapStyleId, setCurrentMapStyleId] = useState<string>(DEFAULT_MAP_STYLE_ID);
+    const [isPixiReady, setIsPixiReady] = useState(false);
+    const [showDebug, setShowDebug] = useState(false);
+    const [isFollowingPlayer, setIsFollowingPlayer] = useState(true);
+    const [hudHeight, setHudHeight] = useState<number>(60);
 
-    const {
-        sessionId,
+    // --- Hooks --- (Order can matter)
+    const mapInstanceRef = useMapLibre({
+        mapContainerRef,
+        currentMapStyleId, // Pass current style ID state
+    });
+
+    // Stable callback for Pixi readiness
+    const handlePixiReady = useCallback(() => setIsPixiReady(true), []);
+
+    const pixiRefs = usePixiApp({
+        pixiContainerRef,
+        onPixiReady: handlePixiReady,
+        carHeight: CAR_HEIGHT,
+    });
+
+    const colyseusState: UseColyseusReturn = useColyseus();
+    const { // Destructure only what's needed from Colyseus return
+        sessionIdRef,
         players,
         items,
         itemsScoredCount,
@@ -35,105 +79,158 @@ const GameCanvas: React.FC = () => {
         isConnected,
         error: colyseusError,
         sendInput,
-        addAi
-        // TODO: Expose message queue or callbacks from useColyseus for water_reset etc.
-    } = useColyseus();
+        addAiPlayer,
+    } = colyseusState;
 
     const { inputVector } = useInputManager();
 
-    // Local Component State
-    const [currentMapStyleId, setCurrentMapStyleId] = useState<string>(DEFAULT_MAP_STYLE_ID);
-    const [isPixiReady, setIsPixiReady] = useState(false);
-    const [showResetMessage] = useState(false);
-    const [localPlayerTeam, setLocalPlayerTeam] = useState<'Red' | 'Blue' | undefined>(undefined);
+    // --- Derived State --- (Move localPlayerTeam up)
+    const derivedTeam = players.get(sessionIdRef.current ?? '')?.team;
+    const localPlayerTeam = derivedTeam === 'none' ? undefined : derivedTeam;
 
-    // MapLibre Hook (pass currentMapStyleId state)
-    const mapInstance = useMapLibre({ mapContainerRef, currentMapStyleId });
-
-    // Stable callback for when Pixi is ready
-    const handlePixiReady = useCallback(() => {
-        console.log("[GameCanvas handlePixiReady] Setting isPixiReady to true");
-        setIsPixiReady(true);
-    }, []); // Empty dependency array ensures the function identity is stable
-
-    const pixiRefs = usePixiApp({
-        pixiContainerRef,
-        onPixiReady: handlePixiReady, // Pass the stable callback
-        carHeight: CAR_HEIGHT, // Pass only height
-    });
-
-    // TODO: Implement message handling from useColyseus
-    // useEffect(() => { ... listen for water_reset ... });
-
-    // Derive local player team for HUD
+    // --- Effect to measure HUD height ---
     useEffect(() => {
-        if (sessionId && players.has(sessionId)) {
-            const team = players.get(sessionId)?.team;
-            setLocalPlayerTeam(team === 'Red' || team === 'Blue' ? team : undefined);
-        } else {
-            setLocalPlayerTeam(undefined);
+        if (hudWrapperRef.current) {
+            setHudHeight(hudWrapperRef.current.offsetHeight);
         }
-    }, [sessionId, players]);
+        // Re-run if potential height-affecting props change
+    }, [scores, gameTimeRemaining, localPlayerTeam, itemsScoredCount]); // Now localPlayerTeam is defined
+    // -------------------------------------
 
-    // Main Game Loop Hook
+    // --- Memoized Callback for LocationSearch ---
+    const handleLocationSelected = useCallback(() => {
+        console.log("[GameCanvas] Location selected, disabling player follow.");
+        setIsFollowingPlayer(false);
+    }, []); // Empty dependency array: function identity is stable
+    // -------------------------------------------
+
+    // --- Game Loop Hook --- (Run after other hooks have initialized)
     useGameLoop({
-        pixiRefs,
-        mapInstance,
-        sessionId,
+        pixiRefs, // Pass the ref object
+        mapInstance: mapInstanceRef, // Pass the map instance ref object
+        sessionId: sessionIdRef.current, // Pass the current value (string | null)
         players,
         items,
         isConnected,
         sendInput,
         inputVector,
-        isPixiReady, // Pass flag to game loop hook
-        carHeight: CAR_HEIGHT, // Pass only height
-        // updateHudState removed
+        isPixiReady,
+        carHeight: CAR_HEIGHT,
+        isFollowingPlayer,
+        hudHeight,
     });
 
-  return (
-    <div className="relative w-full h-screen z-0">
-            {/* Map & Canvas Layers */}
-            <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', height: '100%' }} className="z-10" />
-            <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} className="z-20">
-                {/* Pixi canvas appended here by usePixiApp */}
-      </div>
+    // --- Dust Particles Hook ---
+    useDustParticles({
+        app: pixiRefs.current?.app ?? null, // Pass the PIXI app instance or null
+        players,
+        pixiRefs, // Pass the ref object
+        sessionIdRef, // Pass the session ID ref object
+        carHeight: CAR_HEIGHT,
+    });
 
-            {/* UI Elements */}
-      <HUD
-        redScore={scores.red}
-        blueScore={scores.blue}
-        gameTimeRemaining={gameTimeRemaining}
-                localPlayerTeam={localPlayerTeam}
-                itemsScoredCount={itemsScoredCount} // Use scored count
-            />
-            <AIControls onAddAi={addAi} />
-            <MapStyleSelector // <-- ADDED
-                currentStyleId={currentMapStyleId}
-                onStyleChange={setCurrentMapStyleId}
-            />
+    // --- Derived State --- (Moved localPlayerTeam earlier)
+    // const derivedTeam = players.get(sessionIdRef.current ?? '')?.team;
+    // const localPlayerTeam = derivedTeam === 'none' ? undefined : derivedTeam;
+    const currentMapStyleUrl = availableMapStyles.find(s => s.id === currentMapStyleId)?.url ?? '';
 
-            {/* Colyseus Connection/Error Info (Optional Debug) */}
-            {/* Use inline style positioning, Tailwind for others - Remove debug border */}
+    // --- Render --- (Conditional rendering based on hook readiness)
+    return (
+        <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+            {/* Map & Pixi Container Layers */}
+            <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+            {/* The div below is the container where usePixiApp will append the canvas */}
+            <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+            {/* Removed explicit <canvas> element - usePixiApp manages it */}
+
+            {/* Location Search Control */}
+            {mapInstanceRef.current && API_KEY && (
+                <div
+                    style={{ position: 'absolute', top: 10, left: 10, zIndex: 20 }}
+                    className="shadow-lg rounded p-1"
+                 >
+                    <LocationSearch
+                        mapInstance={mapInstanceRef.current}
+                        apiKey={API_KEY}
+                        onResultSelected={handleLocationSelected}
+                    />
+                </div>
+            )}
+
+            {/* HUD Centered at Top */}
             <div
-                style={{ position: 'absolute', top: '1rem', left: '1rem' }} // ~ top-4 left-4
-                className="p-2 bg-gray-800 bg-opacity-70 rounded text-white text-xs shadow-md z-30" // Removed border
+                ref={hudWrapperRef}
+                style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 15 }}
             >
-                 {isConnected ? `Connected (ID: ${sessionId})` : 'Disconnected'}
-                 {colyseusError && <div style={{ marginTop: '0.25rem', color: '#fde047' }}>Error: {colyseusError}</div>} {/* ~mt-1 text-yellow-300 */}
+                <FloatingPanel
+                    className="rounded shadow-md px-4 py-2 min-w-[220px] max-w-[320px]"
+                    style={{ backdropFilter: 'blur(2px)', opacity: 0.6 }}
+                >
+                    <HUD
+                        redScore={scores.red}
+                        blueScore={scores.blue}
+                        localPlayerTeam={localPlayerTeam}
+                        gameTimeRemaining={gameTimeRemaining}
+                        itemsScoredCount={itemsScoredCount}
+                    />
+                </FloatingPanel>
             </div>
 
-            {/* Water Reset Message (Keep local state for now) */}
-      {showResetMessage && (
-        <div style={{
-                    position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
-                    padding: '10px 20px', backgroundColor: 'rgba(255, 0, 0, 0.7)', color: 'white',
-                    borderRadius: '5px', zIndex: 1000, pointerEvents: 'none'
-        }}>
-          SPLASH! You hit the water!
-        </div>
-      )}
-    </div>
-  );
-};
+            {/* --- Absolute Positioned UI Elements --- */}
+            <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }} className="flex flex-col space-y-2 items-end">
+                <FloatingPanel className="rounded mb-1">
+                    <AIControls onAddAi={addAiPlayer} />
+                </FloatingPanel>
+                {API_KEY && mapInstanceRef.current && (
+                    <FloatingPanel className="rounded mb-1">
+                        <MapStyleSelector
+                            currentStyleId={currentMapStyleId}
+                            onStyleChange={setCurrentMapStyleId}
+                        />
+                    </FloatingPanel>
+                )}
+                <FloatingPanel className="rounded">
+                    <button
+                        onClick={() => setShowDebug(prev => !prev)}
+                        className="bg-transparent text-white p-1 px-2 rounded text-xs opacity-80 hover:opacity-100 shadow"
+                    >
+                        {showDebug ? 'Hide' : 'Show'} Debug
+                    </button>
+                </FloatingPanel>
+            </div>
 
-export default GameCanvas;
+            {/* Bottom-Left Status */}
+            <div style={{ position: 'absolute', bottom: '10px', left: '10px', zIndex: 30 }}>
+                <FloatingPanel className="p-2 rounded text-white text-xs shadow-md min-w-[180px]">
+                    {isConnected ? `Status: Connected (ID: ${sessionIdRef.current ?? 'N/A'})` : 'Status: Disconnected'}
+                    {colyseusError && <div style={{ marginTop: '0.25rem', color: '#fde047' }}>Error: {colyseusError}</div>}
+                </FloatingPanel>
+            </div>
+
+            {/* Debug Panel Placeholder */}
+            {showDebug && (
+                <div style={{ position: 'absolute', bottom: '40px', left: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '5px', fontSize: '10px', zIndex: 30, maxHeight: '40%', overflowY: 'auto' }}>
+                    <p>Debug Panel Placeholder</p>
+                    <p>Session ID: {sessionIdRef.current ?? 'N/A'}</p>
+                    <p>Map Style ID: {currentMapStyleId}</p>
+                    <p>Pixi Ready: {isPixiReady ? 'Yes' : 'No'}</p>
+                    <p>Players: {players.size}</p>
+                    <p>Following Player: {isFollowingPlayer ? 'Yes' : 'No'}</p>
+                    {!isFollowingPlayer && (
+                        <button
+                            onClick={() => setIsFollowingPlayer(true)}
+                            className="mt-2 bg-blue-600 hover:bg-blue-700 text-white p-1 rounded text-xs"
+                        >
+                            Re-Follow Player
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Objective Arrow Placeholder (if re-added later) */}
+
+        </div>
+    );
+}
+
+// Using named export

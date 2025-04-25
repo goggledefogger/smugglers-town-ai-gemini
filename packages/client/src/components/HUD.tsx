@@ -22,29 +22,22 @@ const formatTime = (totalSeconds: number | undefined): string => {
 const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, localPlayerTeam, itemsScoredCount }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: '10px',
-    left: '50%',
-    transform: 'translateX(-50%)', // Center horizontally
     display: 'flex',
-    gap: '30px',
-    backgroundColor: 'rgba(19, 22, 25, 0.7)', // Charcoal semi-transparent bg
+    gap: '15px',
+    alignItems: 'center',
     color: 'white',
     padding: '8px 15px',
     borderRadius: '10px',
     fontFamily: 'Source Sans Pro, sans-serif', // Match design doc
     fontSize: '1.2em',
-    zIndex: 10, // Ensure it's above map/pixi
     pointerEvents: 'none', // Allow clicks to pass through to game if needed
   };
 
   const scoreStyle: React.CSSProperties = {
-      minWidth: '40px', // Ensure some space
       textAlign: 'center',
   };
 
   const timerStyle: React.CSSProperties = {
-      minWidth: '60px',
       textAlign: 'center',
       fontVariantNumeric: 'tabular-nums', // Monospaced numbers
   };
@@ -60,7 +53,6 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, local
 
   // Style for item count
   const itemCountStyle: React.CSSProperties = {
-      minWidth: '100px', // Give it some space
       textAlign: 'center',
       fontSize: '0.9em',
       opacity: 0.9,

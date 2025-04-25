@@ -24,6 +24,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Basic server-side AI opponent with simple targeting logic (pursues item carrier or item, returns to base).
 - Basic server-side physics response for player-player collisions (bouncing).
 - Item transfer occurs on any player-player collision (including teammates), respecting cooldown.
+- Location search bar to find and jump to specific map locations (using MapTiler Geocoding).
 
 ### Planned / Future
 - Client-side prediction for improved input responsiveness.
@@ -153,11 +154,19 @@ The client uses three distinct layers for rendering visuals:
     *   Includes a dynamic navigation arrow fixed to the top-center of the screen, pointing towards the current objective (item, carrier, or player's base).
 
 3.  **HUD/Static UI Layer (React/HTML/CSS):**
-    *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, buttons, status messages).
-    *   **Technology:** Standard React components, HTML, CSS.
+    *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, buttons, status messages, search bar).
+    *   **Technology:** Standard React components, HTML, CSS (Tailwind).
     *   **Coordinates:** Standard CSS positioning (relative to the viewport/container).
     *   **Updates:** Driven by React state changes based on server data or user input.
-    *   **Positioning Note:** Due to unresolved issues with Tailwind CSS positioning utilities (`absolute`, `top-*`, `left-*`, etc.) within this project setup, absolutely positioned UI elements (like the HUD, AI Controls, Map Selector, Debug Info) should use **inline `style` props** for `position`, `top`, `left`, `right`, `bottom`. Other styling (colors, padding, text, borders) should still use standard Tailwind `className` utilities.
+    *   **Positioning Strategy:**
+        *   **Floating Panel Containers:** The main containers for floating UI elements (e.g., the `div` holding the HUD, the `div` holding the right-side controls, the `div` holding the search bar in `GameCanvas.tsx`) use **inline `style` props** for absolute positioning relative to the viewport (`position: 'absolute'`, `top`, `left`, `right`, `bottom`, `transform`). This provides reliable placement over the map/canvas layers.
+        *   **Internal Component Layout:** Components *inside* these containers (e.g., `HUD`, `AIControls`, `MapStyleSelector`, `FloatingPanel`) use standard layout methods (like Flexbox, often via Tailwind utilities like `flex`, `gap`, `p-*`, `rounded`, etc.) to arrange their own content. They do **not** typically define their own absolute positioning.
+        *   **React-to-PixiJS Positioning (e.g., Navigation Arrow):** For PixiJS elements (like the navigation arrow) that need to be positioned relative to React UI elements (like the HUD), a measurement approach is used:
+            1. A React `ref` is attached to the relevant UI element container (e.g., the HUD's wrapper `div`).
+            2. A `useEffect` hook measures the element's dimensions (`offsetHeight`).
+            3. The dimension is stored in React state and passed as a prop to the relevant PixiJS hook (`useGameLoop`).
+            4. The PixiJS hook calculates the sprite's screen position dynamically based on the passed dimension and desired margins (e.g., `arrowScreenY = HUD_TOP_OFFSET + hudHeight + ARROW_MARGIN`). This avoids hardcoded pixel values and ensures the PixiJS element adapts to the UI element's size.
+        *   **Third-Party Component Styling (e.g., Location Search):** Integrating third-party UI components (like the MapTiler Geocoding control) into the floating panel style required specific CSS overrides in `src/index.css` to force transparency on its internal elements and apply custom background/hover effects to its container, ensuring visual consistency.
 
 ## Contributing
 

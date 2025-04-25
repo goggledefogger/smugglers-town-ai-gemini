@@ -47,6 +47,8 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Fix vortex visual effect to appear at the precise location where the toilet was returned (scored), not at the center of the base or attached to the car
 - [x] Refactor input handling for modularity (Keyboard/Gamepad) and add Gamepad support
 - [x] Add visual effect for driving off-road (e.g., dust clouds using Pixi.Graphics triggered by server state)
+- [x] Add location search bar to recenter map view (using MapTiler Geocoding control)
+- [x] Refine UI layout and transparency for floating panels (HUD, Controls, Status, Search)
 
 ## In Progress Tasks
 
@@ -109,3 +111,5 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `.env`: Environment variables
 - ✅ `.gitignore`: **Includes build artifacts like .tsbuildinfo.**
 - ✅ `TASKS.md`: This file.
+- ✅ `client/src/components/LocationSearch.tsx`: Renders the MapTiler Geocoding control.
+- ✅ `client/src/components/FloatingPanel.tsx`: Reusable component for consistent floating UI panel styling (transparency, hover).

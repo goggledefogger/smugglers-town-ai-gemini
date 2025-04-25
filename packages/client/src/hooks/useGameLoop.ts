@@ -28,6 +28,8 @@ interface UseGameLoopProps {
     inputVector: InputVector;
     isPixiReady: boolean;
     carHeight: number;
+    isFollowingPlayer: boolean;
+    hudHeight: number;
 }
 
 // Vortex is always a static animation at the item's last carried position (when scored)
@@ -44,6 +46,8 @@ export function useGameLoop({
     inputVector,
     isPixiReady,
     carHeight,
+    isFollowingPlayer,
+    hudHeight,
 }: UseGameLoopProps) {
     const mapTargetCenter = useRef<LngLat | null>(null);
     const initialPlacementDone = useRef(false);
@@ -63,6 +67,7 @@ export function useGameLoop({
     const inputVectorRef = useRef(inputVector);
     const isConnectedRef = useRef(isConnected);
     const sendInputRef = useRef(sendInput);
+    const isFollowingPlayerRef = useRef(isFollowingPlayer);
 
     // Effect to update refs when props change
     useEffect(() => {
@@ -72,7 +77,8 @@ export function useGameLoop({
         inputVectorRef.current = inputVector;
         isConnectedRef.current = isConnected;
         sendInputRef.current = sendInput;
-    }, [players, items, sessionId, inputVector, isConnected, sendInput]);
+        isFollowingPlayerRef.current = isFollowingPlayer;
+    }, [players, items, sessionId, inputVector, isConnected, sendInput, isFollowingPlayer]);
     // --------------------------------------------------
 
     // Load item texture once
@@ -110,63 +116,65 @@ export function useGameLoop({
         }
     }, []);
 
-    useDustParticles({
-        app: pixiRefs.current?.app ?? null,
-        players: players, // <-- PASS THE STATE PROP, NOT THE REF
-        pixiRefs: pixiRefs,
-        sessionIdRef: sessionIdRef,
-        carHeight: carHeight,
-    });
-    // ******************************************
-
     const gameLoop = useCallback((ticker: PIXI.Ticker) => {
         const app = pixiRefs.current?.app;
         const map = mapInstance.current;
         const refs = pixiRefs.current;
-
-        // --- Access state/props via refs ---
         const currentSessionId = sessionIdRef.current;
         const currentPlayers = playersRef.current;
         const currentItems = itemsRef.current;
         const currentInputVector = inputVectorRef.current;
         const currentIsConnected = isConnectedRef.current;
         const currentSendInput = sendInputRef.current;
+        const currentIsFollowingPlayer = isFollowingPlayerRef.current;
+        const currentCarHeight = carHeight;
+        const currentHudHeight = hudHeight;
 
-        const currentCarHeight = carHeight; // Use the prop directly
-        if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return; // Use prop value & check validity
+        if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return;
 
         const normalizedDeltaFactor = ticker.deltaMS / (1000 / 60);
         const lerpFactor = Math.min(INTERPOLATION_FACTOR * normalizedDeltaFactor, 1.0);
+
+        // --- Get Local Player State (needed in multiple places) ---
+        const localPlayerState = currentPlayers.get(currentSessionId);
+        // ---------------------------------------------------------
 
         // --- Send Input ---
         if (currentIsConnected) {
             currentSendInput(currentInputVector);
         }
 
-        // --- Map Interpolation ---
-        if (mapTargetCenter.current) {
-            const currentCenter = map.getCenter();
-            const targetCenter = mapTargetCenter.current;
-            const nextLng = lerp(currentCenter.lng, targetCenter.lng, lerpFactor);
-            const nextLat = lerp(currentCenter.lat, targetCenter.lat, lerpFactor);
-            if (Math.abs(currentCenter.lng - nextLng) > 1e-7 || Math.abs(currentCenter.lat - nextLat) > 1e-7) {
-                 try { map.setCenter([nextLng, nextLat]); } catch (e) { }
-            }
-        }
-
-        // --- Calculate Target Map Center (based on local player) ---
-        const localPlayerState = currentPlayers.get(currentSessionId);
-        if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
-            try {
-                const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
-                if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat from worldToGeo");
-                mapTargetCenter.current = new LngLat(targetLng, targetLat);
-            } catch(e) {
+        // --- Map Interpolation & Target Calculation (Conditional) ---
+        if (currentIsFollowingPlayer) {
+            if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
+                try {
+                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                    if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat from worldToGeo");
+                    mapTargetCenter.current = new LngLat(targetLng, targetLat);
+                } catch(e) {
+                    console.warn("[GameLoop] Error calculating map target center:", e);
+                    mapTargetCenter.current = null;
+                }
+            } else {
                 mapTargetCenter.current = null;
             }
+
+            if (mapTargetCenter.current) {
+                const currentCenter = map.getCenter();
+                const targetCenter = mapTargetCenter.current;
+                // Use a smaller lerp factor for smoother following?
+                const followLerpFactor = lerpFactor * 0.5; // Example: make following slightly slower
+                const nextLng = lerp(currentCenter.lng, targetCenter.lng, followLerpFactor);
+                const nextLat = lerp(currentCenter.lat, targetCenter.lat, followLerpFactor);
+                if (Math.abs(currentCenter.lng - nextLng) > 1e-7 || Math.abs(currentCenter.lat - nextLat) > 1e-7) {
+                     try { map.setCenter([nextLng, nextLat]); } catch (e) { /* ignore potential errors during rapid updates */ }
+                }
+            }
         } else {
+            // If not following, ensure interpolation target is cleared
             mapTargetCenter.current = null;
         }
+        // --- End Conditional Map Centering ---
 
         // --- Vortex effects on status change ---
         currentItems.forEach((item: FlagState) => {
@@ -305,44 +313,48 @@ export function useGameLoop({
         });
 
         // --- Player Sprite Cleanup ---
-        const currentPlayerIds = new Set(currentPlayers.keys());
-        const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
+        const processedPlayerIds = new Set<string>();
+        if (localPlayerState && refs.carSprite) {
+            // Update local player sprite
+            let sprite = refs.carSprite;
+            if (isFinite(localPlayerState.x) && isFinite(localPlayerState.y) && isFinite(localPlayerState.heading)) {
+                try {
+                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                    const targetScreenPos = map.project([targetLng, targetLat]);
+                    if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
 
-        // Remove sprites for players who left
-        existingPlayerSpriteIds.forEach(pSessionId => {
-            if (!currentPlayerIds.has(pSessionId)) {
-                const sprite = refs.otherPlayerSprites.current[pSessionId];
-                if (sprite) sprite.destroy();
-                delete refs.otherPlayerSprites.current[pSessionId];
+                    const targetRotation = -localPlayerState.heading + Math.PI / 2;
+
+                    // Tint for team color
+                    sprite.tint = localPlayerState.team === 'Red' ? 0xff4444 : 0x4488ff;
+
+                    if (!initialPlacementDone.current) { // Place directly before initial placement
+                         sprite.x = targetScreenPos.x;
+                         sprite.y = targetScreenPos.y;
+                         sprite.rotation = targetRotation;
+                    } else { // Interpolate after initial placement
+                        sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
+                        sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
+                        sprite.rotation = angleLerp(sprite.rotation, targetRotation, lerpFactor);
+                    }
+                    sprite.visible = true;
+
+                } catch (e) {
+                    sprite.visible = false;
+                 }
+            } else {
+                 sprite.visible = false;
             }
-        });
-
-        // --- Initial Placement --- (Simplified version, refine if needed)
-        if (!initialPlacementDone.current && localPlayerState) { // localPlayerState derived from refs
-             try {
-                const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
-                if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat for initial center");
-
-                map.setCenter([targetLng, targetLat]);
-
-                const playerScreenPos = map.project([targetLng, targetLat]);
-                if (!playerScreenPos || !isFinite(playerScreenPos.x) || !isFinite(playerScreenPos.y)) throw new Error("Failed to project local player");
-
-                app.stage.pivot.set(playerScreenPos.x, playerScreenPos.y);
-                app.stage.position.set(app.screen.width / 2, app.screen.height / 2);
-                initialPlacementDone.current = true;
-             } catch (e) {
-                initialPlacementDone.current = false; // Retry next frame?
-             }
+            processedPlayerIds.add(currentSessionId);
         }
 
-        // --- Update Player Sprites ---
-        currentPlayers.forEach((playerState: Player, pSessionId: string) => {
-            const isLocalPlayer = pSessionId === currentSessionId;
-            let sprite = isLocalPlayer ? refs.carSprite : refs.otherPlayerSprites.current[pSessionId];
+        // Update other player sprites
+        currentPlayers.forEach((playerState, pSessionId) => {
+            if (pSessionId === currentSessionId) return; // Skip local player
+            let sprite = refs.otherPlayerSprites.current[pSessionId];
 
             // Create sprite if it doesn't exist (for remote players)
-            if (!isLocalPlayer && !sprite && carTextureRef.current) {
+            if (!sprite && carTextureRef.current) {
               const texture = carTextureRef.current;
               // Check texture dimensions
               if (!texture || texture.width === 0 || texture.height === 0) {
@@ -370,7 +382,7 @@ export function useGameLoop({
             if (!sprite) return; // Skip if sprite still couldn't be created/found
 
             // Ensure local player sprite also has zIndex
-            if (isLocalPlayer && sprite.zIndex !== 10) {
+            if (pSessionId === currentSessionId && sprite.zIndex !== 10) {
                  sprite.zIndex = 10;
             }
 
@@ -402,7 +414,37 @@ export function useGameLoop({
             } else {
                  sprite.visible = false;
             }
+            processedPlayerIds.add(pSessionId);
         });
+
+        // Remove sprites for players who left
+        const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
+        existingPlayerSpriteIds.forEach(pSessionId => {
+            if (!processedPlayerIds.has(pSessionId)) {
+                const sprite = refs.otherPlayerSprites.current[pSessionId];
+                if (sprite) sprite.destroy();
+                delete refs.otherPlayerSprites.current[pSessionId];
+            }
+        });
+
+        // --- Initial Placement --- (Simplified version, refine if needed)
+        if (!initialPlacementDone.current && localPlayerState) { // localPlayerState derived from refs
+             try {
+                const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat for initial center");
+
+                map.setCenter([targetLng, targetLat]);
+
+                const playerScreenPos = map.project([targetLng, targetLat]);
+                if (!playerScreenPos || !isFinite(playerScreenPos.x) || !isFinite(playerScreenPos.y)) throw new Error("Failed to project local player");
+
+                app.stage.pivot.set(playerScreenPos.x, playerScreenPos.y);
+                app.stage.position.set(app.screen.width / 2, app.screen.height / 2);
+                initialPlacementDone.current = true;
+             } catch (e) {
+                initialPlacementDone.current = false; // Retry next frame?
+             }
+        }
 
         // --- Update Item Sprites ---
         let scoredCount = 0;
@@ -492,15 +534,21 @@ export function useGameLoop({
             }
         });
 
+        // --- Update Debug Sprites ---
+         if (refs.debugCarrierSprite && refs.debugStealerSprite) {
+            // ... (debug sprite logic - might use localPlayerState) ...
+         }
+
         // --- Update Navigation Arrow --- (Refactored for multiple items)
         const arrowSprite = refs.navigationArrowSprite;
-        if (arrowSprite && localPlayerState) { // localPlayerState derived from refs
+        const localCarSprite = refs.carSprite;
+        if (arrowSprite && localPlayerState && localCarSprite) { // Added localCarSprite null check
             let targetWorldX: number | null = null;
             let targetWorldY: number | null = null;
             let arrowColor: number = 0xFFFFFF;
             let minTargetDistSq = Infinity;
 
-            const playerCarryingItem = currentItems.find((item: FlagState) => item.carrierId === currentSessionId); // Use ref values, Added type annotation
+            const playerCarryingItem = currentItems.find((item: FlagState) => item.carrierId === currentSessionId);
 
             if (playerCarryingItem) {
                 // Player is carrying: Target own base
@@ -525,9 +573,9 @@ export function useGameLoop({
                 // If no available item, target nearest opponent carrier
                 if (targetWorldX === null) {
                     minTargetDistSq = Infinity;
-                    currentItems.forEach((item: FlagState) => { // Use ref value, Added type annotation
+                    currentItems.forEach((item: FlagState) => {
                         if (item.status === 'carried' && item.carrierId) {
-                             const carrier = currentPlayers.get(item.carrierId); // Use ref value
+                             const carrier = currentPlayers.get(item.carrierId);
                              if (carrier && carrier.team !== localPlayerState.team && isFinite(carrier.x) && isFinite(carrier.y)) {
                                 const dSq = distSq(localPlayerState.x, localPlayerState.y, carrier.x, carrier.y);
                                 if (dSq < minTargetDistSq) {
@@ -547,16 +595,21 @@ export function useGameLoop({
                 try {
                     const [targetLng, targetLat]: [number, number] = worldToGeo(targetWorldX, targetWorldY);
                     const targetScreenPos = map.project([targetLng, targetLat]);
-                    const localCarSprite = refs.carSprite;
-                    if (targetScreenPos && isFinite(targetScreenPos.x) && isFinite(targetScreenPos.y) && localCarSprite) {
+
+                    if (targetScreenPos && isFinite(targetScreenPos.x) && isFinite(targetScreenPos.y)) {
                         const screenWidth = app.screen.width;
                         const arrowScreenX = screenWidth / 2;
-                        const arrowScreenY = 80;
+                        const HUD_TOP_OFFSET = 10;
+                        const ARROW_MARGIN = 10;
+                        const arrowScreenY = HUD_TOP_OFFSET + currentHudHeight + ARROW_MARGIN;
+
                         const arrowScreenPoint = new PIXI.Point(arrowScreenX, arrowScreenY);
                         const arrowStagePos = app.stage.toLocal(arrowScreenPoint);
+
                         const dx = targetScreenPos.x - localCarSprite.x;
                         const dy = targetScreenPos.y - localCarSprite.y;
                         const angle = Math.atan2(dy, dx);
+
                         arrowSprite.position.set(arrowStagePos.x, arrowStagePos.y);
                         arrowSprite.rotation = angle + Math.PI / 2;
                         arrowSprite.tint = arrowColor;
@@ -571,38 +624,26 @@ export function useGameLoop({
                  arrowSprite.visible = false; // Hide if no target
             }
         } else if (arrowSprite) {
-            arrowSprite.visible = false; // Hide if no local player or arrow sprite
+            arrowSprite.visible = false; // Hide if no local player/car or arrow sprite itself is missing
         }
+    }, [pixiRefs, mapInstance, carHeight, hudHeight]); // Dependencies should include relevant state/refs
 
-    // Stabilize dependencies: only fundamental refs needed
-    }, [pixiRefs, mapInstance, carHeight]);
-
-    // Effect to add/remove ticker
+    // Effect to manage the PIXI ticker
     useEffect(() => {
-        const app = pixiRefs.current?.app;
-        // Ensure app and ticker are valid before adding the loop
-        if (app?.ticker && isPixiReady) {
-            try {
-                app.ticker.add(gameLoop);
-            } catch (err: any) { // Added type annotation
-                console.error("[useGameLoop] Error adding game loop to ticker:", err);
+        if (!isPixiReady || !pixiRefs.current?.app) return;
+        const app = pixiRefs.current.app;
+        console.log("[useGameLoop] Adding gameLoop to ticker.");
+        // Ensure previous loop instance is removed if app re-initializes (unlikely here)
+        app.ticker.remove(gameLoop);
+        app.ticker.add(gameLoop);
+        return () => {
+            if (app) {
+                console.log("[useGameLoop] Removing gameLoop from ticker.");
+                app.ticker.remove(gameLoop);
             }
+        };
+    }, [isPixiReady, pixiRefs, gameLoop]); // Rerun if pixi becomes ready or loop function changes
 
-            return () => {
-                 // Check if app and ticker still exist before removing
-                 // Also check if gameLoop is actually on the ticker - Removed contains check as it's not public API
-                 if (app?.ticker) {
-                    try {
-                        app.ticker.remove(gameLoop);
-                    } catch (err: any) {
-                         console.error("[useGameLoop] Error removing game loop from ticker:", err);
-                    }
-                 }
-            };
-        }
-    // Effect now depends only on isPixiReady, pixiRefs, and the stable gameLoop
-    }, [pixiRefs, gameLoop, isPixiReady]);
-
-    // This hook doesn't return anything directly, it manages the loop
-    // and interacts via refs and callbacks.
+    // No return value needed if it only sets up the loop
+    // If pixiRefs were created here, they would be returned.
 }

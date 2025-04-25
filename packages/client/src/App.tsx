@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth } from './firebaseConfig';
 import { signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
-import GameCanvas from './features/GameCanvas';
+import { GameCanvas } from './features/GameCanvas';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);

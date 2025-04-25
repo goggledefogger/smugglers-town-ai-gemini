@@ -346,15 +346,29 @@ export function useGameLoop({
                     // Tint for team color
                     sprite.tint = localPlayerState.team === 'Red' ? 0xff4444 : 0x4488ff;
 
-                    if (!initialPlacementDone.current) { // Place directly before initial placement
-                         sprite.x = targetScreenPos.x;
-                         sprite.y = targetScreenPos.y;
-                         sprite.rotation = targetRotation;
-                    } else { // Interpolate after initial placement
-                        sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
-                        sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
+                    // --- Position Update ---
+                    if (currentIsFollowingPlayer) {
+                        // Option 1: Force to screen center when following
+                        sprite.x = app.screen.width / 2;
+                        sprite.y = app.screen.height / 2;
+                    } else {
+                        // Original logic: Interpolate towards projected position
+                        if (!initialPlacementDone.current) { // Place directly before initial placement
+                             sprite.x = targetScreenPos.x;
+                             sprite.y = targetScreenPos.y;
+                        } else { // Interpolate after initial placement
+                            sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
+                            sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
+                        }
+                    }
+                    
+                    // --- Rotation Update (Always applied) ---
+                    if (!initialPlacementDone.current) {
+                        sprite.rotation = targetRotation;
+                    } else {
                         sprite.rotation = angleLerp(sprite.rotation, targetRotation, lerpFactor);
                     }
+
                     sprite.visible = true;
 
                 } catch (e) {

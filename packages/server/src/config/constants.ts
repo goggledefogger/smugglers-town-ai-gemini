@@ -5,9 +5,9 @@
  */
 
 // Player movement physics constants (ensure these are used)
-export const MAX_SPEED = 50; // meters per second
+export const MAX_SPEED = 50; // meters per second (Set back to 50)
 export const ACCELERATION = 200; // meters per second^2 (Adjusted middle ground)
-export const FRICTION_FACTOR = 0.70; // Multiplier per second (Reduced from 0.75 to decrease drift)
+export const FRICTION_FACTOR = 0.60; // Multiplier per second (Reduced from 0.70 to decrease drift further)
 export const TURN_SPEED = Math.PI * 3.0; // radians per second (Increased from 1.5 * PI)
 
 // Player dimensions for collision checks - MOVED TO SHARED-UTILS

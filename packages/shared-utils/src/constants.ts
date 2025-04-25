@@ -17,12 +17,7 @@ export const METERS_PER_DEGREE_LAT_APPROX = 111320; // Approx meters per degree 
 // Gameplay Constants
 export const NUM_ITEMS = 4; // Number of items to spawn each round
 
-// Player Constants
-export const PLAYER_MAX_SPEED = 10; // meters per second
-export const PLAYER_ACCELERATION = 8; // meters per second squared
-export const PLAYER_FRICTION = 0.5; // Damping factor
-export const PLAYER_TURN_SPEED = Math.PI * 1.5; // radians per second
-
+// Player Constants - NOTE: Actual physics values are in server/config/constants.ts
 // Player Dimensions (used for physics and rendering hints)
 export const PLAYER_EFFECTIVE_RADIUS = 2.0; // meters
 export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for server collision checks)

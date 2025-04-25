@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react';
 import * as PIXI from 'pixi.js';
 import { ASSET_PATHS } from '../config/assets'; // <-- ADD
+import { DropShadowFilter } from 'pixi-filters'; // <-- ADD
 
 // Constants (Consider moving shared ones)
 // REMOVED CAR_WIDTH, CAR_HEIGHT constants as they are passed in or calculated
@@ -58,7 +59,13 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 app = new PIXI.Application();
                 pixiRefs.current.app = app;
 
-                await app.init({ resizeTo: currentPixiContainer, backgroundAlpha: 0, resolution: window.devicePixelRatio || 1, autoDensity: true });
+                await app.init({ 
+                    resizeTo: currentPixiContainer, 
+                    backgroundAlpha: 0, 
+                    resolution: window.devicePixelRatio || 1, 
+                    autoDensity: true, 
+                    antialias: true // Explicitly enable antialiasing
+                });
                 if (!isMounted.current) return;
                 pixiInitComplete.current = true;
                 console.log("[usePixiApp] Pixi init ok.");
@@ -131,11 +138,21 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 arrowGfx.poly([
                     { x: 0, y: -arrowHeight / 2 }, { x: arrowWidth / 2, y: arrowHeight / 2 },
                     { x: 0, y: arrowHeight / 4 }, { x: -arrowWidth / 2, y: arrowHeight / 2 }
-                ]).fill(0xFFFFFF);
+                ]).fill(0xFFFFFF); // Keep base graphic white for tinting
                 arrowGfx.pivot.set(0, 0); arrowGfx.position.set(-1000, -1000); arrowGfx.visible = false;
+
+                // Add drop shadow filter
+                const shadowFilter = new DropShadowFilter();
+                shadowFilter.color = 0x000000;
+                shadowFilter.alpha = 0.7;
+                shadowFilter.blur = 4;
+                shadowFilter.offset = { x: 0, y: 3 };
+                shadowFilter.quality = 3; // Reverted quality from 5 to 3 for performance
+                arrowGfx.filters = [shadowFilter];
+
                 app.stage.addChild(arrowGfx);
                 pixiRefs.current.navigationArrowSprite = arrowGfx;
-                console.log("[usePixiApp] Navigation arrow sprite created.");
+                console.log("[usePixiApp] Navigation arrow sprite created with drop shadow.");
 
                 // Call callback if provided
                 if (onPixiReady) {

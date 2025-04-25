@@ -1,7 +1,7 @@
 // packages/shared-utils/src/constants.ts
 
 // Base Positions (Meters from Origin) - Used by Server and Client Rendering
-export const BASE_DISTANCE = 80; // meters
+export const BASE_DISTANCE = 200; // meters (Increased from 80)
 export const Y_OFFSET = 0; // Keep bases horizontally aligned for simplicity
 export const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET };
 export const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET };

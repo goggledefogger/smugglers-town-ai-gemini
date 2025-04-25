@@ -39,6 +39,9 @@ importers:
       maplibre-gl:
         specifier: ^4.1.0
         version: 4.7.1
+      pixi-filters:
+        specifier: ^6.1.2
+        version: 6.1.2(pixi.js@8.9.1)
       pixi.js:
         specifier: ^8.1.6
         version: 8.9.1
@@ -1071,6 +1074,9 @@ packages:
 
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
+
+  '@types/gradient-parser@0.1.5':
+    resolution: {integrity: sha512-r7K3NkJz3A95WkVVmjs0NcchhHstC2C/VIYNX4JC6tieviUNo774FFeOHjThr3Vw/WCeMP9kAT77MKbIRlO/4w==}
 
   '@types/http-errors@2.0.4':
     resolution: {integrity: sha512-D0CFMMtydbJAegzOyHjtiKPLlvnm3iTZyZRSZoLq2mRhDdmLfIWOCYPfQJ4cu2erKghU++QvjcUjp/5h7hESpA==}
@@ -2327,6 +2333,11 @@ packages:
   picomatch@2.3.1:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
     engines: {node: '>=8.6'}
+
+  pixi-filters@6.1.2:
+    resolution: {integrity: sha512-zGyrMTcfapSIS8We+8RPzxIYkrUhn0KamRFA9qWwxggOk/guJcW05djg8xNvmNsCxn6LzxK5sODeEFIf9SF5Xg==}
+    peerDependencies:
+      pixi.js: '>=8.0.0-0'
 
   pixi.js@8.9.1:
     resolution: {integrity: sha512-2vF5Yu9WC/83ly2tCGkjb+ZGnrr+vlKtZezmD0AmJEQoYZO5nL94806l+PVcJBKW6qrF0YHtbh0ubb6CB7/8Rg==}
@@ -3865,6 +3876,8 @@ snapshots:
 
   '@types/geojson@7946.0.16': {}
 
+  '@types/gradient-parser@0.1.5': {}
+
   '@types/http-errors@2.0.4': {}
 
   '@types/jsonwebtoken@9.0.9':
@@ -5247,6 +5260,11 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@2.3.1: {}
+
+  pixi-filters@6.1.2(pixi.js@8.9.1):
+    dependencies:
+      '@types/gradient-parser': 0.1.5
+      pixi.js: 8.9.1
 
   pixi.js@8.9.1:
     dependencies:

@@ -52,6 +52,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
     - [x] Fixed map navigation (`flyTo`) and zoom level on location select
     - [x] Fixed map centering to re-follow player after location change animation
 - [x] Refine UI layout and transparency for floating panels (HUD, Controls, Status, Search)
+- [x] Tuned driving physics (MAX_SPEED, ACCELERATION, FRICTION_FACTOR, ROAD_SPEED_MULTIPLIER) for better feel
 
 ## In Progress Tasks
 
@@ -60,7 +61,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 ## Future Tasks
 
 - [x] Refine player/item sprite graphics/animations
-- [x] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
+- [ ] Add visual effects (e.g., speed lines, collision sparks, toilet smoke)
 - [ ] Dynamically size car sprites based on loaded SVG dimensions
 - [ ] Sound effects
 - [ ] Database integration (player accounts, stats persistence - if needed)
@@ -70,6 +71,11 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [ ] Implement 'hot-swap' refresh (immediate replacement of old player instance)
 - [ ] Add different car types (visuals + performance: e.g., fast/drifty vs slow/grippy)
 - [ ] Address Colyseus deprecation warning (move server options to WebSocketTransport)
+- [ ] Improve Base and Item Placement:
+    - Define 3 pairs of potential base locations (Red/Blue).
+    - Randomly select one pair of base locations at the start of each round/match.
+    - Ensure initial item spawn locations are more spread out and potentially relative to base locations.
+    - (Long term: Allow manual selection or POI-based placement).
 
 ## Implementation Plan
 

@@ -570,7 +570,7 @@ export function useGameLoop({
         if (arrowSprite && localPlayerState && localCarSprite) { // Added localCarSprite null check
             let targetWorldX: number | null = null;
             let targetWorldY: number | null = null;
-            let arrowColor: number = 0xFFFFFF;
+            let arrowColor: number = 0xFFFFFF; // Default to white for better visibility
             let minTargetDistSq = Infinity;
 
             const playerCarryingItem = currentItems.find((item: FlagState) => item.carrierId === currentSessionId);
@@ -580,7 +580,7 @@ export function useGameLoop({
                 const basePos = localPlayerState.team === 'Red' ? RED_BASE_POS : BLUE_BASE_POS;
                 targetWorldX = basePos.x;
                 targetWorldY = basePos.y;
-                arrowColor = localPlayerState.team === 'Red' ? 0xff0000 : 0x0000ff;
+                arrowColor = localPlayerState.team === 'Red' ? 0xff0000 : 0x0000ff; // Keep team colors
             } else {
                 // Target nearest available/dropped item
                 currentItems.forEach((item: FlagState) => { // Use currentItems
@@ -590,7 +590,7 @@ export function useGameLoop({
                             minTargetDistSq = dSq;
                             targetWorldX = item.x;
                             targetWorldY = item.y;
-                            arrowColor = 0xFFFF00; // Yellow for neutral item
+                            arrowColor = 0xFFFF00; // Yellow for neutral item (Reverted from white)
                         }
                     }
                 });
@@ -607,7 +607,7 @@ export function useGameLoop({
                                     minTargetDistSq = dSq;
                                     targetWorldX = carrier.x;
                                     targetWorldY = carrier.y;
-                                    arrowColor = carrier.team === 'Red' ? 0xff0000 : 0x0000ff;
+                                    arrowColor = carrier.team === 'Red' ? 0xff0000 : 0x0000ff; // Keep team colors
                                 }
                              }
                         }
@@ -626,7 +626,7 @@ export function useGameLoop({
                         const screenWidth = app.screen.width;
                         const arrowScreenX = screenWidth / 2;
                         const HUD_TOP_OFFSET = 10;
-                        const ARROW_MARGIN = 10;
+                        const ARROW_MARGIN = 25; // Increased from 10
                         const arrowScreenY = HUD_TOP_OFFSET + currentHudHeight + ARROW_MARGIN;
 
                         const arrowScreenPoint = new PIXI.Point(arrowScreenX, arrowScreenY);
@@ -639,6 +639,7 @@ export function useGameLoop({
                         arrowSprite.position.set(arrowStagePos.x, arrowStagePos.y);
                         arrowSprite.rotation = angle + Math.PI / 2;
                         arrowSprite.tint = arrowColor;
+                        arrowSprite.scale.set(1.5); // Increase size
                         arrowSprite.visible = true;
                     } else {
                          arrowSprite.visible = false;

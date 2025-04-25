@@ -19,7 +19,7 @@ export const NUM_ITEMS = 4; // Number of items to spawn each round
 
 // Player Constants - NOTE: Actual physics values are in server/config/constants.ts
 // Player Dimensions (used for physics and rendering hints)
-export const PLAYER_EFFECTIVE_RADIUS = 2.0; // meters
+export const PLAYER_EFFECTIVE_RADIUS = 1.6; // meters (Reduced from 1.8)
 export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for server collision checks)
 export const CAR_HEIGHT = 75; // Client-side rendering height (pixels, relative to zoom)
 

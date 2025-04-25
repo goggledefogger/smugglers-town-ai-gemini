@@ -4,13 +4,12 @@ import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
 import { PixiRefs } from './usePixiApp';
-import { RED_BASE_POS, BLUE_BASE_POS, distSq, VISUAL_BASE_RADIUS } from "@smugglers-town/shared-utils"; // Import shared constants AND distSq AND VISUAL_BASE_RADIUS
+import { RED_BASE_POS, BLUE_BASE_POS, distSq, VISUAL_BASE_RADIUS } from "@smugglers-town/shared-utils";
 import 'pixi.js/gif';
 import { Assets } from 'pixi.js';
 import { GifSprite, GifSource } from 'pixi.js/gif';
-import { type InputVector } from './useInputManager'; // Use 'type' for type-only import
+import { type InputVector } from './useInputManager';
 import { ASSET_PATHS } from '../config/assets';
-import { useDustParticles } from './useDustParticles';
 
 // Constants from GameCanvas (consider moving)
 const INTERPOLATION_FACTOR = 0.3;
@@ -37,7 +36,7 @@ type ActiveVortex = { sprite: GifSprite; worldX: number; worldY: number };
 export function useGameLoop({
     pixiRefs,
     mapInstance,
-    arenaStateRef, // Add arenaStateRef
+    arenaStateRef,
     sessionId,
     isConnected,
     sendInput,
@@ -368,8 +367,7 @@ export function useGameLoop({
         }
 
         // Update other player sprites
-        // Rename to avoid conflict with item sprites' existingSpriteIds
-        const existingOtherPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
+        // Iterate over all current players to create/update sprites
         currentState.players.forEach((playerState: Player, pSessionId: string) => {
             if (pSessionId === currentSessionId) return; // Skip local player
 
@@ -441,8 +439,8 @@ export function useGameLoop({
         });
 
         // Remove sprites for players who left
-        const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
-        existingPlayerSpriteIds.forEach(pSessionId => {
+        const playerSpriteIds = Object.keys(refs.otherPlayerSprites.current);
+        playerSpriteIds.forEach(pSessionId => {
             // Check against keys in the currentPlayers map
             if (!currentPlayers.has(pSessionId)) {
                 const sprite = refs.otherPlayerSprites.current[pSessionId];

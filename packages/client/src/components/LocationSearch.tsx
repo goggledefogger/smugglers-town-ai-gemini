@@ -1,10 +1,19 @@
 import React, { useEffect, useRef } from 'react';
 import { GeocodingControl } from '@maptiler/geocoding-control/maplibregl';
-import type { GeocodingControlOptions, SearchResult } from '@maptiler/geocoding-control'; // Import types
 import '@maptiler/geocoding-control/style.css';
 import * as maplibregl from 'maplibre-gl';
-import { Room } from 'colyseus.js'; // Import Room type
-import { ArenaState } from '@smugglers-town/shared-schemas'; // Import ArenaState
+import { Room } from 'colyseus.js';
+import { ArenaState } from '@smugglers-town/shared-schemas';
+
+// Define the options interface manually based on the library's requirements
+interface GeocodingControlOptions {
+    apiKey: string;
+    maplibregl?: typeof maplibregl;
+    marker?: boolean;
+    flyTo?: { speed: number } | boolean;
+    placeholder?: string;
+    [key: string]: any; // Allow other option properties
+}
 
 interface LocationSearchProps {
     apiKey: string;

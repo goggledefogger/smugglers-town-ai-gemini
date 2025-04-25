@@ -1,43 +1,25 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Player, FlagState } from '@smugglers-town/shared-schemas';
-import * as maplibregl from 'maplibre-gl'; // Keep for Map type if needed
+import { CAR_HEIGHT } from '@smugglers-town/shared-utils';
 
 // Hooks
 import { useMapLibre } from '../hooks/useMapLibre';
-import { usePixiApp, PixiRefs } from '../hooks/usePixiApp';
-import { useColyseus, UseColyseusReturn } from '../hooks/useColyseus';
-import { useInputManager, InputVector } from '../hooks/useInputManager';
+import { usePixiApp } from '../hooks/usePixiApp';
+import { useColyseus } from '../hooks/useColyseus';
+import { useInputManager } from '../hooks/useInputManager';
 import { useGameLoop } from '../hooks/useGameLoop';
 import { useDustParticles } from '../hooks/useDustParticles';
 
-// Components (using default imports)
+// Components
 import HUD from '../components/HUD';
 import AIControls from '../components/AIControls';
-import MapStyleSelector from '../components/MapStyleSelector'; // Assuming it uses props based on useMapLibre/useColyseus
+import MapStyleSelector from '../components/MapStyleSelector';
 import { LocationSearch } from '../components/LocationSearch';
 import { FloatingPanel } from '../components/FloatingPanel';
-// Removed DebugInfoPanel and ObjectiveArrow imports
 
-// Constants
-import { CAR_HEIGHT } from '@smugglers-town/shared-utils';
-const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY; // Get API Key directly from env
+const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 
-// Map Style Definitions (Example - manage centrally if complex)
-interface MapStyle {
-    id: string;
-    name: string;
-    url: string; // Assuming full URL is needed or derivable
-}
-const buildStyleUrl = (id: string) => `https://api.maptiler.com/maps/${id}/style.json?key=${API_KEY}`;
-
-const availableMapStyles: MapStyle[] = [
-    { id: 'streets-v2', name: 'Streets', url: buildStyleUrl('streets-v2') },
-    { id: 'hybrid', name: 'Satellite', url: buildStyleUrl('hybrid') },
-    { id: 'basic-v2', name: 'Basic', url: buildStyleUrl('basic-v2') },
-    { id: 'outdoor-v2', name: 'Outdoor', url: buildStyleUrl('outdoor-v2') },
-    { id: 'streets-v2-dark', name: 'Streets Dark', url: buildStyleUrl('streets-v2-dark') },
-];
+// Default map style ID for initial rendering
 const DEFAULT_MAP_STYLE_ID = 'streets-v2';
 
 export function GameCanvas() {
@@ -68,13 +50,11 @@ export function GameCanvas() {
         carHeight: CAR_HEIGHT,
     });
 
-    const colyseusState: UseColyseusReturn = useColyseus();
+    const colyseusState = useColyseus();
     const { // Destructure only what's needed from Colyseus return
         sessionIdRef,
-        state,
         room,
         players,
-        items,
         itemsScoredCount,
         scores,
         gameTimeRemaining,
@@ -116,12 +96,10 @@ export function GameCanvas() {
 
     // --- Game Loop Hook --- (Run after other hooks have initialized)
     useGameLoop({
-        pixiRefs, // Pass the ref object
-        mapInstance: mapInstanceRef, // Pass the map instance ref object
-        sessionId: sessionIdRef.current, // Pass the current value (string | null)
-        arenaStateRef: colyseusState.arenaStateRef, // Pass the ref
-        players, // Keep passing for now, might remove later
-        items, // Keep passing for now, might remove later
+        pixiRefs,
+        mapInstance: mapInstanceRef,
+        sessionId: sessionIdRef.current,
+        arenaStateRef,
         isConnected,
         sendInput,
         inputVector,
@@ -133,26 +111,18 @@ export function GameCanvas() {
 
     // --- Dust Particles Hook ---
     useDustParticles({
-        app: pixiRefs.current?.app ?? null, // Pass the PIXI app instance or null
+        app: pixiRefs.current?.app ?? null,
         players,
-        pixiRefs, // Pass the ref object
-        sessionIdRef, // Pass the session ID ref object
+        pixiRefs,
+        sessionIdRef,
         carHeight: CAR_HEIGHT,
     });
 
-    // --- Derived State --- (Moved localPlayerTeam earlier)
-    // const derivedTeam = players.get(sessionIdRef.current ?? '')?.team;
-    // const localPlayerTeam = derivedTeam === 'none' ? undefined : derivedTeam;
-    const currentMapStyleUrl = availableMapStyles.find(s => s.id === currentMapStyleId)?.url ?? '';
-
-    // --- Render --- (Conditional rendering based on hook readiness)
     return (
         <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
             {/* Map & Pixi Container Layers */}
             <div ref={mapContainerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-            {/* The div below is the container where usePixiApp will append the canvas */}
             <div ref={pixiContainerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
-            {/* Removed explicit <canvas> element - usePixiApp manages it */}
 
             {/* Location Search Control */}
             {mapInstanceRef.current && API_KEY && (
@@ -239,11 +209,6 @@ export function GameCanvas() {
                     )}
                 </div>
             )}
-
-            {/* Objective Arrow Placeholder (if re-added later) */}
-
         </div>
     );
 }
-
-// Using named export

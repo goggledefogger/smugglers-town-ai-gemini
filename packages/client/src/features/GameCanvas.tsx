@@ -9,6 +9,7 @@ import { useColyseus } from '../hooks/useColyseus';
 import { useInputManager } from '../hooks/useInputManager';
 import { useGameLoop } from '../hooks/useGameLoop';
 import { useDustParticles } from '../hooks/useDustParticles';
+import { useSmoothedServerTime } from '../hooks/useSmoothedServerTime';
 
 // Components
 import HUD from '../components/HUD';
@@ -66,6 +67,10 @@ export function GameCanvas() {
     } = colyseusState;
 
     const { inputVector } = useInputManager();
+
+    // --- Use the smoothed timer hook ---
+    const smoothedGameTime = useSmoothedServerTime(gameTimeRemaining);
+    // ---------------------------------
 
     // --- Derived State --- (Move localPlayerTeam up)
     const derivedTeam = players.get(sessionIdRef.current ?? '')?.team;
@@ -153,7 +158,7 @@ export function GameCanvas() {
                         redScore={scores.red}
                         blueScore={scores.blue}
                         localPlayerTeam={localPlayerTeam}
-                        gameTimeRemaining={gameTimeRemaining}
+                        gameTimeRemaining={smoothedGameTime}
                         itemsScoredCount={itemsScoredCount}
                     />
                 </FloatingPanel>

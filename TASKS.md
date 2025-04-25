@@ -53,6 +53,8 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
     - [x] Fixed map centering to re-follow player after location change animation
 - [x] Refine UI layout and transparency for floating panels (HUD, Controls, Status, Search)
 - [x] Tuned driving physics (MAX_SPEED, ACCELERATION, FRICTION_FACTOR, ROAD_SPEED_MULTIPLIER) for better feel
+- [x] Fixed local player sprite jitter when camera is following
+- [x] Implemented client-side timer smoothing for smoother countdown display
 
 ## In Progress Tasks
 
@@ -100,11 +102,15 @@ The game uses a server-authoritative architecture with client-side interpolation
 ### Relevant Files
 
 - ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates, **and rendering UI components (HUD, AIControls)**. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
-- ✅ `client/src/components/HUD.tsx`: Displays game scores.
+- ✅ `client/src/components/HUD.tsx`: Displays game scores **and timer**.
 - ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players.
 - ✅ `client/src/components/MapStyleSelector.tsx`: UI component for selecting map styles.
 - ✅ `client/src/hooks/...`: Various hooks for Colyseus connection, input, map, Pixi app, and game loop logic.
-- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules).
+- ✅ `client/src/hooks/usePixiApp.ts`: Manages PixiJS application setup, sprite creation (including navigation arrow with shadow filter).
+- ✅ `client/src/hooks/useGameLoop.ts`: Handles the main game loop, including sprite position/rotation updates (local sprite centered when following), map centering, and item/base rendering.
+- ✅ `client/src/hooks/useDustParticles.ts`: Manages dust particle effects for off-road driving.
+- ✅ `client/src/hooks/useSmoothedServerTime.ts`: Provides client-side smoothing for the game timer display.
+- ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules), **and decrementing the game timer**.
 - ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
 - ✅ `server/src/game/playerController.ts`: Handles human player movement logic.
 - ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing) **and player collision physics/transfers**.

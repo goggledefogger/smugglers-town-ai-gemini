@@ -167,6 +167,17 @@ export class ArenaRoom extends Room<ArenaState> {
   // --- Game Loop ---
 
   update(dt: number) {
+    // --- Game Timer Update ---
+    if (this.state.gameTimeRemaining > 0) {
+      this.state.gameTimeRemaining -= dt;
+      if (this.state.gameTimeRemaining <= 0) {
+        this.state.gameTimeRemaining = 0;
+        console.log("[ArenaRoom] Game timer reached zero!");
+        // TODO: Implement end-of-game logic here (e.g., lock clock, show scores)
+      }
+    }
+    // ------------------------
+
     // --- Periodic Logging ---
     this.periodicLogTimer += dt;
     if (this.periodicLogTimer >= 10) { // Log approx every 10 seconds

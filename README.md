@@ -25,6 +25,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Basic server-side physics response for player-player collisions (bouncing).
 - Item transfer occurs on any player-player collision (including teammates), respecting cooldown.
 - Location search bar to find and jump to specific map locations (using MapTiler Geocoding).
+- More accurate player-player collision detection (tuned offset collision point).
 
 ### Planned / Future
 - Client-side prediction for improved input responsiveness.

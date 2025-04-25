@@ -139,6 +139,11 @@ export function checkPlayerCollisionsAndStealing(
     let latestDebugData: CollisionCheckDebugData | null = null;
     const processedPairs = new Set<string>();
 
+    // Define the forward offset for the collision check point
+    const COLLISION_OFFSET = PLAYER_EFFECTIVE_RADIUS / 2; // Offset by HALF the radius
+    // New threshold based on sum of radii of offset circles (2 * radius)^2
+    const collisionThresholdSq = 4 * PLAYER_COLLISION_RADIUS_SQ;
+
     // Iterate through all players as potential colliders
     for (let i = 0; i < playerIds.length; i++) {
         const p1Id = playerIds[i];
@@ -151,16 +156,29 @@ export function checkPlayerCollisionsAndStealing(
             const p2 = state.players.get(p2Id);
             if (!p2) continue;
 
+            // --- Calculate Offset Collision Centers ---
+            const p1OffsetX = Math.cos(p1.heading) * COLLISION_OFFSET;
+            const p1OffsetY = Math.sin(p1.heading) * COLLISION_OFFSET;
+            const p1CollisionX = p1.x + p1OffsetX;
+            const p1CollisionY = p1.y + p1OffsetY;
+
+            const p2OffsetX = Math.cos(p2.heading) * COLLISION_OFFSET;
+            const p2OffsetY = Math.sin(p2.heading) * COLLISION_OFFSET;
+            const p2CollisionX = p2.x + p2OffsetX;
+            const p2CollisionY = p2.y + p2OffsetY;
+            // ---------------------------------------
+
             // Ensure pair order consistency for the processed set
             const pairKey = p1Id < p2Id ? `${p1Id}-${p2Id}` : `${p2Id}-${p1Id}`;
 
-            const dx = p2.x - p1.x;
-            const dy = p2.y - p1.y;
+            // Calculate distance squared between offset centers
+            const dx = p2CollisionX - p1CollisionX;
+            const dy = p2CollisionY - p1CollisionY;
             const dSq = dx * dx + dy * dy;
 
-            // Use a combined radius for collision check
-            const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
-            const collisionThresholdSq = combinedRadius * combinedRadius;
+            // Use a combined radius for collision check - MOVED Threshold calculation above loop
+            // const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
+            // const collisionThresholdSq = combinedRadius * combinedRadius;
 
             // --- REMOVED LOGGING FOR COLLISION CHECK ---
             // console.log(`[Collision Check] P1: ${p1Id} (${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}), P2: ${p2Id} (${p2.x.toFixed(2)}, ${p2.y.toFixed(2)}), DistSq: ${dSq.toFixed(2)}, ThresholdSq: ${collisionThresholdSq.toFixed(2)}`);

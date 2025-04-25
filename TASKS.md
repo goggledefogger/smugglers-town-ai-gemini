@@ -55,6 +55,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Tuned driving physics (MAX_SPEED, ACCELERATION, FRICTION_FACTOR, ROAD_SPEED_MULTIPLIER) for better feel
 - [x] Fixed local player sprite jitter when camera is following
 - [x] Implemented client-side timer smoothing for smoother countdown display
+- [x] Improved player collision detection accuracy (offset collision point, tuned offset distance)
 
 ## In Progress Tasks
 
@@ -113,7 +114,7 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `server/src/ArenaRoom.ts`: Colyseus Room handler managing game state, player lifecycle, receiving input, running the server-side game simulation loop (delegating logic to controllers/rules), **and decrementing the game timer**.
 - ✅ `server/src/game/aiController.ts`: Handles AI targeting and movement logic.
 - ✅ `server/src/game/playerController.ts`: Handles human player movement logic.
-- ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing) **and player collision physics/transfers**.
+- ✅ `server/src/game/rules.ts`: Handles core game rules (pickup, scoring, stealing) **and player collision physics/transfers (now using offset collision points)**.
 - ✅ `server/src/config/constants.ts`: Defines server-specific game constants **(impulse magnitude, steal cooldown)**.
 - ✅ `server/src/utils/...`: Server-specific utility functions.
 - ✅ `packages/shared-schemas/src/index.ts`: Exports the shared state structure (`Player`, `FlagState`, `ArenaState`) defined using `@colyseus/schema`.

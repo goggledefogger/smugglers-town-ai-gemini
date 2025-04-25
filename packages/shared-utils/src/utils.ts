@@ -46,39 +46,49 @@ export function metersPerDegreeLngApprox(latitude: number): number {
 }
 
 /**
- * Converts Geo coords [Lng, Lat] to world meters (relative to origin).
+ * Converts Geo coords [Lng, Lat] to world meters (relative to the specified origin).
  */
-export function geoToWorld(lon: number, lat: number): { x: number; y: number } {
-    const deltaLat = lat - ORIGIN_LAT;
-    const deltaLon = lon - ORIGIN_LNG;
+export function geoToWorld(
+    lon: number,
+    lat: number,
+    originLng: number,
+    originLat: number
+): { x: number; y: number } {
+    const deltaLat = lat - originLat;
+    const deltaLon = lon - originLng;
 
     const y_meters = deltaLat * METERS_PER_DEGREE_LAT_APPROX;
 
-    // Calculate meters per degree longitude AT THE ORIGIN'S LATITUDE for x conversion
-    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin's latitude
+    // Calculate meters per degree longitude AT THE SPECIFIED ORIGIN'S LATITUDE for x conversion
+    const metersPerLng = metersPerDegreeLngApprox(originLat); // Use specified origin's latitude
     const x_meters = deltaLon * metersPerLng;
 
     return { x: x_meters, y: y_meters };
 }
 
 /**
- * Converts world meters (relative to origin) back to approximate Geo coords [Lng, Lat].
+ * Converts world meters (relative to the specified origin) back to approximate Geo coords [Lng, Lat].
  */
-export function worldToGeo(x_meters: number, y_meters: number): [number, number] {
-    const metersPerLng = metersPerDegreeLngApprox(ORIGIN_LAT); // Use origin lat for approximation
+export function worldToGeo(
+    x_meters: number,
+    y_meters: number,
+    originLng: number,
+    originLat: number
+): [number, number] {
+    const metersPerLng = metersPerDegreeLngApprox(originLat); // Use specified origin lat for approximation
     if (!isFinite(metersPerLng) || metersPerLng === 0) {
-        console.warn("worldToGeo: Invalid metersPerLng, returning origin");
-        return [ORIGIN_LNG, ORIGIN_LAT]; // Avoid division by zero
+        console.warn("worldToGeo: Invalid metersPerLng, returning specified origin");
+        return [originLng, originLat]; // Avoid division by zero
     }
     const deltaLng = x_meters / metersPerLng;
     const deltaLat = y_meters / METERS_PER_DEGREE_LAT_APPROX;
-    const resultLng = ORIGIN_LNG + deltaLng;
-    const resultLat = ORIGIN_LAT + deltaLat;
+    const resultLng = originLng + deltaLng;
+    const resultLat = originLat + deltaLat;
 
     // Basic sanity check for resulting coordinates
     if (!isFinite(resultLng) || !isFinite(resultLat) || Math.abs(resultLat) > 90) {
-        console.warn(`worldToGeo: Calculation resulted in invalid coordinates (${resultLng}, ${resultLat}) from input (${x_meters}, ${y_meters}). Returning origin.`);
-        return [ORIGIN_LNG, ORIGIN_LAT];
+        console.warn(`worldToGeo: Calculation resulted in invalid coordinates (${resultLng}, ${resultLat}) from input (${x_meters}, ${y_meters}). Returning specified origin.`);
+        return [originLng, originLat];
     }
     return [resultLng, resultLat];
 }

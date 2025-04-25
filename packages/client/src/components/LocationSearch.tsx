@@ -3,16 +3,25 @@ import { GeocodingControl } from '@maptiler/geocoding-control/maplibregl';
 import type { GeocodingControlOptions, SearchResult } from '@maptiler/geocoding-control'; // Import types
 import '@maptiler/geocoding-control/style.css';
 import * as maplibregl from 'maplibre-gl';
+import { Room } from 'colyseus.js'; // Import Room type
+import { ArenaState } from '@smugglers-town/shared-schemas'; // Import ArenaState
 
 interface LocationSearchProps {
     apiKey: string;
     mapInstance: maplibregl.Map | null;
     onResultSelected?: () => void; // Callback when a result is selected
+    room: Room<ArenaState> | null; // Add room prop
     // Add other options if needed
     controlOptions?: Partial<GeocodingControlOptions>;
 }
 
-export const LocationSearch: React.FC<LocationSearchProps> = ({ apiKey, mapInstance, onResultSelected, controlOptions }) => {
+export const LocationSearch: React.FC<LocationSearchProps> = ({
+    apiKey,
+    mapInstance,
+    onResultSelected,
+    room,
+    controlOptions
+}: LocationSearchProps) => {
     const geocodingControlRef = useRef<GeocodingControl | null>(null);
 
     useEffect(() => {
@@ -24,25 +33,62 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({ apiKey, mapInsta
         // Create the control instance with options
         const gc = new GeocodingControl({
             apiKey: apiKey,
-            maplibregl: maplibregl, // Pass the maplibre-gl library object (seems necessary for events?)
-            marker: false, // Don't show a marker for the result by default
-            flyTo: { speed: 1.8 }, // Adjust animation
+            maplibregl: maplibregl,
+            marker: false,
+            flyTo: false, // Disable built-in flyTo
             placeholder: "Search Location...",
             ...(controlOptions || {}),
         });
 
-        // --- Add event listener for result selection ---
-        const handleSelect = (result: SearchResult | null) => {
-            console.log("Geocoding result selected:", result);
-            if (result && onResultSelected) {
-                onResultSelected(); // Call the callback to disable following
+        // --- Add event listener for final selection ("pick" event) ---
+        const handlePick = (evt: { feature: any }) => { // Event likely contains the feature directly
+            console.log("[LocationSearch handlePick] Received pick event:", evt);
+            const feature = evt.feature; // Extract feature from event
+
+            // Only proceed if we have a valid feature object with a center
+            if (feature && feature.center) {
+                console.log("[LocationSearch handlePick] Processing picked feature:", feature);
+
+                // Call the original callback (e.g., to disable following)
+                if (onResultSelected) {
+                    onResultSelected();
+                }
+
+                // Send message to server to update world origin
+                const featureCenter = feature.center; // Use center from the picked feature
+
+                if (room && Array.isArray(featureCenter) && featureCenter.length === 2) {
+                    const [lng, lat] = featureCenter;
+                    if (typeof lat === 'number' && typeof lng === 'number') {
+                        console.log("[LocationSearch] Successfully sending set_world_origin. Feature object:", feature);
+                        console.log(`Sending set_world_origin: Lat=${lat}, Lng=${lng}`);
+                        room.send("set_world_origin", { lat, lng });
+
+                        // Fly map to the selected location with desired zoom
+                        if (mapInstance) {
+                            const desiredZoom = 19; // Use the same zoom as initial load
+                            mapInstance.flyTo({ center: [lng, lat], zoom: desiredZoom, speed: 1.8 });
+                        }
+                    } else {
+                        console.warn("Invalid coordinates in picked feature center:", featureCenter);
+                    }
+                } else {
+                     // Log details if the stricter check fails
+                     console.warn("Cannot send set_world_origin. Details:", {
+                         isRoomAvailable: !!room,
+                         hasFeature: !!feature,
+                         hasValidFeatureCenter: Array.isArray(featureCenter) && featureCenter.length === 2,
+                         featureCenterValue: featureCenter, // Log the actual value
+                         pickedEventObject: evt // Log the whole event object
+                     });
+                }
+            } else {
+                 console.warn("[LocationSearch handlePick] Received pick event without valid feature:", evt);
             }
         };
-        // The control itself might be the event emitter, or its container?
-        // Let's assume the control instance `gc` emits the event.
-        // Common event names are 'select', 'result', 'results'. Trying 'select'.
-        // Need to cast gc to any if types don't explicitly show event methods.
-        (gc as any).on('select', handleSelect);
+
+        // Use 'pick' event instead of 'select'
+        (gc as any).on('pick', handlePick);
         // ---------------------------------------------
 
         // Add the control directly to the map instance
@@ -56,7 +102,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({ apiKey, mapInsta
             if (mapInstance && geocodingControlRef.current) {
                 try {
                     // Remove listener before removing control
-                    (geocodingControlRef.current as any)?.off('select', handleSelect);
+                    (geocodingControlRef.current as any)?.off('pick', handlePick); // Use pick event here too
                     mapInstance.removeControl(geocodingControlRef.current);
                 } catch (error) {
                     // Tolerate errors during removal, as the map might be destroyed already
@@ -66,7 +112,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({ apiKey, mapInsta
             }
         };
         // Ensure effect runs only when map or key changes
-    }, [mapInstance, apiKey, controlOptions, onResultSelected]);
+    }, [mapInstance, apiKey, controlOptions, onResultSelected, room]); // Add room to dependency array
 
     // No need to render a container, MapLibre handles placement
     return null;

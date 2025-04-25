@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
-import { Player, FlagState } from '@smugglers-town/shared-schemas';
+import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
 import { PixiRefs } from './usePixiApp';
@@ -18,10 +18,9 @@ const INTERPOLATION_FACTOR = 0.3;
 interface UseGameLoopProps {
     pixiRefs: React.RefObject<PixiRefs>;
     mapInstance: React.RefObject<MapLibreMap | null>;
-    // State from useColyseus
+    // State Ref from useColyseus
+    arenaStateRef: React.RefObject<ArenaState | null>;
     sessionId: string | null;
-    players: Map<string, Player>;
-    items: FlagState[];
     isConnected: boolean;
     sendInput: (input: { dx: number; dy: number }) => void;
     // Use the unified InputVector type
@@ -38,9 +37,8 @@ type ActiveVortex = { sprite: GifSprite; worldX: number; worldY: number };
 export function useGameLoop({
     pixiRefs,
     mapInstance,
+    arenaStateRef, // Add arenaStateRef
     sessionId,
-    players,
-    items,
     isConnected,
     sendInput,
     inputVector,
@@ -61,24 +59,26 @@ export function useGameLoop({
     const activeVortexesRef = useRef<ActiveVortex[]>([]);
 
     // --- Refs for frequently changing state/props ---
-    const playersRef = useRef(players);
-    const itemsRef = useRef(items);
+    // Removed playersRef, itemsRef, stateRef
     const sessionIdRef = useRef(sessionId);
     const inputVectorRef = useRef(inputVector);
     const isConnectedRef = useRef(isConnected);
     const sendInputRef = useRef(sendInput);
     const isFollowingPlayerRef = useRef(isFollowingPlayer);
+    const carHeightRef = useRef(carHeight);
+    const hudHeightRef = useRef(hudHeight);
 
     // Effect to update refs when props change
     useEffect(() => {
-        playersRef.current = players;
-        itemsRef.current = items;
+        // Removed stateRef, playersRef, itemsRef updates
         sessionIdRef.current = sessionId;
         inputVectorRef.current = inputVector;
         isConnectedRef.current = isConnected;
         sendInputRef.current = sendInput;
         isFollowingPlayerRef.current = isFollowingPlayer;
-    }, [players, items, sessionId, inputVector, isConnected, sendInput, isFollowingPlayer]);
+        carHeightRef.current = carHeight;
+        hudHeightRef.current = hudHeight;
+    }, [sessionId, inputVector, isConnected, sendInput, isFollowingPlayer, carHeight, hudHeight]);
     // --------------------------------------------------
 
     // Load item texture once
@@ -120,24 +120,39 @@ export function useGameLoop({
         const app = pixiRefs.current?.app;
         const map = mapInstance.current;
         const refs = pixiRefs.current;
+        const currentState = arenaStateRef.current; // Use arenaStateRef.current
         const currentSessionId = sessionIdRef.current;
-        const currentPlayers = playersRef.current;
-        const currentItems = itemsRef.current;
+        // Get players and items from arenaStateRef
+        const currentPlayers = currentState?.players;
+        const currentItems = currentState?.items ?? []; // Default to empty array if items is null/undefined
         const currentInputVector = inputVectorRef.current;
         const currentIsConnected = isConnectedRef.current;
         const currentSendInput = sendInputRef.current;
         const currentIsFollowingPlayer = isFollowingPlayerRef.current;
-        const currentCarHeight = carHeight;
-        const currentHudHeight = hudHeight;
+        const currentCarHeight = carHeightRef.current;
+        const currentHudHeight = hudHeightRef.current;
 
-        if (!app || !map || !refs || !currentSessionId || !isFinite(currentCarHeight)) return;
+        // Log values BEFORE the guard clause
+        // console.log('[GameLoop Pre-Guard Check]', {
+        //     appExists: !!app,
+        //     mapExists: !!map,
+        //     refsExists: !!refs,
+        //     // Check currentState directly from ref
+        //     stateExists: !!currentState,
+        //     playersExists: !!currentPlayers, // Add check for players map
+        //     sessionIdExists: !!currentSessionId,
+        //     carHeightIsFinite: isFinite(currentCarHeight)
+        // });
+
+        // GUARD CLAUSE HERE: Update checks
+        if (!app || !map || !refs || !currentState || !currentPlayers || !currentSessionId || !isFinite(currentCarHeight)) return;
 
         const normalizedDeltaFactor = ticker.deltaMS / (1000 / 60);
         const lerpFactor = Math.min(INTERPOLATION_FACTOR * normalizedDeltaFactor, 1.0);
 
         // --- Get Local Player State (needed in multiple places) ---
-        const localPlayerState = currentPlayers.get(currentSessionId);
-        // ---------------------------------------------------------
+        const localPlayerState = currentPlayers.get(currentSessionId); // Use currentPlayers from ref
+        // ---------------------------------------------------------\
 
         // --- Send Input ---
         if (currentIsConnected) {
@@ -148,7 +163,8 @@ export function useGameLoop({
         if (currentIsFollowingPlayer) {
             if (localPlayerState && isFinite(localPlayerState.x) && isFinite(localPlayerState.y)) {
                 try {
-                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                    const { worldOriginLng, worldOriginLat } = currentState;
+                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y, worldOriginLng, worldOriginLat);
                     if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid target LngLat from worldToGeo");
                     mapTargetCenter.current = new LngLat(targetLng, targetLat);
                 } catch(e) {
@@ -177,7 +193,7 @@ export function useGameLoop({
         // --- End Conditional Map Centering ---
 
         // --- Vortex effects on status change ---
-        currentItems.forEach((item: FlagState) => {
+        currentItems.forEach((item: FlagState) => { // Use currentItems from ref
             const prevStatus = prevStatusesRef.current.get(item.id);
             const prevCarrierId = prevCarrierIdsRef.current.get(item.id) ?? undefined;
             if (prevStatus !== item.status && vortexSourceRef.current) {
@@ -211,8 +227,9 @@ export function useGameLoop({
                                 let vortexWorld = { x: toiletWorldX, y: toiletWorldY };
                                 if (map) {
                                     try {
+                                        const { worldOriginLng, worldOriginLat } = currentState;
                                         const lngLat = map.unproject([toiletScreenX, toiletScreenY]);
-                                        vortexWorld = geoToWorld(lngLat.lng, lngLat.lat);
+                                        vortexWorld = geoToWorld(lngLat.lng, lngLat.lat, worldOriginLng, worldOriginLat);
                                     } catch (e) {}
                                 }
                                 activeVortexesRef.current.push({ sprite: vortex, worldX: vortexWorld.x, worldY: vortexWorld.y });
@@ -261,7 +278,8 @@ export function useGameLoop({
                 const { sprite, worldX, worldY } = vortexObj;
                 if (sprite.destroyed) return false;
                 try {
-                    const [lng, lat] = worldToGeo(worldX, worldY);
+                    const { worldOriginLng, worldOriginLat } = currentState;
+                    const [lng, lat] = worldToGeo(worldX, worldY, worldOriginLng, worldOriginLat);
                     const screenPos = map.project([lng, lat]);
                     sprite.position.set(screenPos.x, screenPos.y);
                 } catch (e) {
@@ -272,11 +290,11 @@ export function useGameLoop({
         }
 
         // --- Create/Destroy Item Sprites ---
-        const currentItemIds = new Set(currentItems.map((item: FlagState) => item.id));
+        const currentItemIds = new Set(currentItems.map((item: FlagState) => item.id)); // Use currentItems
         const existingSpriteIds = new Set(refs.itemSprites.current.keys());
 
         // Create missing sprites
-        currentItems.forEach((item: FlagState) => {
+        currentItems.forEach((item: FlagState) => { // Use currentItems
             if (!refs.itemSprites.current.has(item.id)) {
                 if (itemSourceRef.current) {
                     // Create animated GIF sprite
@@ -319,7 +337,8 @@ export function useGameLoop({
             let sprite = refs.carSprite;
             if (isFinite(localPlayerState.x) && isFinite(localPlayerState.y) && isFinite(localPlayerState.heading)) {
                 try {
-                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
+                    const { worldOriginLng, worldOriginLat } = currentState;
+                    const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y, worldOriginLng, worldOriginLat);
                     const targetScreenPos = map.project([targetLng, targetLat]);
                     if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
 
@@ -349,8 +368,11 @@ export function useGameLoop({
         }
 
         // Update other player sprites
-        currentPlayers.forEach((playerState, pSessionId) => {
+        // Rename to avoid conflict with item sprites' existingSpriteIds
+        const existingOtherPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
+        currentState.players.forEach((playerState: Player, pSessionId: string) => {
             if (pSessionId === currentSessionId) return; // Skip local player
+
             let sprite = refs.otherPlayerSprites.current[pSessionId];
 
             // Create sprite if it doesn't exist (for remote players)
@@ -388,7 +410,8 @@ export function useGameLoop({
 
             if (isFinite(playerState.x) && isFinite(playerState.y) && isFinite(playerState.heading)) {
                 try {
-                    const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y);
+                    const { worldOriginLng, worldOriginLat } = currentState;
+                    const [targetLng, targetLat] = worldToGeo(playerState.x, playerState.y, worldOriginLng, worldOriginLat);
                     const targetScreenPos = map.project([targetLng, targetLat]);
                     if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
 
@@ -398,9 +421,9 @@ export function useGameLoop({
                     sprite.tint = playerState.team === 'Red' ? 0xff4444 : 0x4488ff;
 
                     if (!initialPlacementDone.current) { // Place directly before initial placement
-                         sprite.x = targetScreenPos.x;
-                         sprite.y = targetScreenPos.y;
-                         sprite.rotation = targetRotation;
+                        sprite.x = targetScreenPos.x;
+                        sprite.y = targetScreenPos.y;
+                        sprite.rotation = targetRotation;
                     } else { // Interpolate after initial placement
                         sprite.x = lerp(sprite.x, targetScreenPos.x, lerpFactor);
                         sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
@@ -420,35 +443,37 @@ export function useGameLoop({
         // Remove sprites for players who left
         const existingPlayerSpriteIds = new Set(Object.keys(refs.otherPlayerSprites.current));
         existingPlayerSpriteIds.forEach(pSessionId => {
-            if (!processedPlayerIds.has(pSessionId)) {
+            // Check against keys in the currentPlayers map
+            if (!currentPlayers.has(pSessionId)) {
                 const sprite = refs.otherPlayerSprites.current[pSessionId];
                 if (sprite) sprite.destroy();
                 delete refs.otherPlayerSprites.current[pSessionId];
             }
         });
 
-        // --- Initial Placement --- (Simplified version, refine if needed)
-        if (!initialPlacementDone.current && localPlayerState) { // localPlayerState derived from refs
-             try {
-                const [targetLng, targetLat] = worldToGeo(localPlayerState.x, localPlayerState.y);
-                if (!isFinite(targetLng) || !isFinite(targetLat)) throw new Error("Invalid LngLat for initial center");
-
-                map.setCenter([targetLng, targetLat]);
-
-                const playerScreenPos = map.project([targetLng, targetLat]);
-                if (!playerScreenPos || !isFinite(playerScreenPos.x) || !isFinite(playerScreenPos.y)) throw new Error("Failed to project local player");
-
-                app.stage.pivot.set(playerScreenPos.x, playerScreenPos.y);
-                app.stage.position.set(app.screen.width / 2, app.screen.height / 2);
+        // --- Initial Placement ---
+        if (!initialPlacementDone.current && localPlayerState && currentState.worldOriginLng && currentState.worldOriginLat) {
+            // Log the values being used for initial placement
+            console.log('[GameLoop Init Check]', {
+                initialPlacementDone,
+                localPlayerState: !!localPlayerState,
+                currentState: !!currentState,
+                worldOriginLng: currentState.worldOriginLng,
+                worldOriginLat: currentState.worldOriginLat,
+            });
+            try {
+                const [initialLng, initialLat] = worldToGeo(localPlayerState.x, localPlayerState.y, currentState.worldOriginLng, currentState.worldOriginLat);
+                map.setCenter([initialLng, initialLat]);
                 initialPlacementDone.current = true;
-             } catch (e) {
-                initialPlacementDone.current = false; // Retry next frame?
-             }
+                console.log("[GameLoop] Initial map center set based on player state.");
+            } catch (e) {
+                console.error("[GameLoop] Error setting initial map center:", e);
+            }
         }
 
         // --- Update Item Sprites ---
         let scoredCount = 0;
-        currentItems.forEach((itemState: FlagState) => {
+        currentItems.forEach((itemState: FlagState) => { // Use currentItems
             const sprite = refs.itemSprites.current.get(itemState.id);
             if (!sprite) return;
 
@@ -479,7 +504,8 @@ export function useGameLoop({
             } else if (itemState.status === 'available' || itemState.status === 'dropped') {
                  if (isFinite(itemState.x) && isFinite(itemState.y)) {
                      try {
-                         const [targetLng, targetLat] = worldToGeo(itemState.x, itemState.y);
+                         const { worldOriginLng, worldOriginLat } = currentState;
+                         const [targetLng, targetLat] = worldToGeo(itemState.x, itemState.y, worldOriginLng, worldOriginLat);
                          const targetScreenPos = map.project([targetLng, targetLat]);
                          if (!targetScreenPos || !isFinite(targetScreenPos.x) || !isFinite(targetScreenPos.y)) throw new Error("Invalid projection");
                          targetX = targetScreenPos.x;
@@ -514,11 +540,12 @@ export function useGameLoop({
         baseSpritesData.forEach(({ sprite, worldPos, color }) => {
             if (sprite) {
                  try {
-                     const [baseLng, baseLat] = worldToGeo(worldPos.x, worldPos.y);
+                     const { worldOriginLng, worldOriginLat } = currentState;
+                     const [baseLng, baseLat] = worldToGeo(worldPos.x, worldPos.y, worldOriginLng, worldOriginLat);
                      const screenPos = map.project([baseLng, baseLat]);
                      const edgeWorldX = worldPos.x + VISUAL_BASE_RADIUS;
                      const edgeWorldY = worldPos.y;
-                     const [edgeLng, edgeLat] = worldToGeo(edgeWorldX, edgeWorldY);
+                     const [edgeLng, edgeLat] = worldToGeo(edgeWorldX, edgeWorldY, worldOriginLng, worldOriginLat);
                      const edgeScreenPos = map.project([edgeLng, edgeLat]);
                      if (!screenPos || !edgeScreenPos || !isFinite(screenPos.x) || !isFinite(screenPos.y) || !isFinite(edgeScreenPos.x) || !isFinite(edgeScreenPos.y)) throw new Error("Invalid base projection");
                      const dx = edgeScreenPos.x - screenPos.x;
@@ -558,7 +585,7 @@ export function useGameLoop({
                 arrowColor = localPlayerState.team === 'Red' ? 0xff0000 : 0x0000ff;
             } else {
                 // Target nearest available/dropped item
-                currentItems.forEach((item: FlagState) => {
+                currentItems.forEach((item: FlagState) => { // Use currentItems
                     if ((item.status === 'available' || item.status === 'dropped') && isFinite(item.x) && isFinite(item.y)) {
                         const dSq = distSq(localPlayerState.x, localPlayerState.y, item.x, item.y);
                         if (dSq < minTargetDistSq) {
@@ -573,9 +600,9 @@ export function useGameLoop({
                 // If no available item, target nearest opponent carrier
                 if (targetWorldX === null) {
                     minTargetDistSq = Infinity;
-                    currentItems.forEach((item: FlagState) => {
+                    currentItems.forEach((item: FlagState) => { // Use currentItems
                         if (item.status === 'carried' && item.carrierId) {
-                             const carrier = currentPlayers.get(item.carrierId);
+                             const carrier = currentPlayers.get(item.carrierId); // Use currentPlayers
                              if (carrier && carrier.team !== localPlayerState.team && isFinite(carrier.x) && isFinite(carrier.y)) {
                                 const dSq = distSq(localPlayerState.x, localPlayerState.y, carrier.x, carrier.y);
                                 if (dSq < minTargetDistSq) {
@@ -593,7 +620,8 @@ export function useGameLoop({
             // Update arrow position and rotation
             if (targetWorldX !== null && targetWorldY !== null) {
                 try {
-                    const [targetLng, targetLat]: [number, number] = worldToGeo(targetWorldX, targetWorldY);
+                    const { worldOriginLng, worldOriginLat } = currentState;
+                    const [targetLng, targetLat]: [number, number] = worldToGeo(targetWorldX, targetWorldY, worldOriginLng, worldOriginLat);
                     const targetScreenPos = map.project([targetLng, targetLat]);
 
                     if (targetScreenPos && isFinite(targetScreenPos.x) && isFinite(targetScreenPos.y)) {
@@ -626,7 +654,7 @@ export function useGameLoop({
         } else if (arrowSprite) {
             arrowSprite.visible = false; // Hide if no local player/car or arrow sprite itself is missing
         }
-    }, [pixiRefs, mapInstance, carHeight, hudHeight]); // Dependencies should include relevant state/refs
+    }, [pixiRefs, mapInstance, arenaStateRef]); // Add arenaStateRef to dependencies
 
     // Effect to manage the PIXI ticker
     useEffect(() => {

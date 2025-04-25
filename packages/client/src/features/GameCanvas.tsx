@@ -71,6 +71,8 @@ export function GameCanvas() {
     const colyseusState: UseColyseusReturn = useColyseus();
     const { // Destructure only what's needed from Colyseus return
         sessionIdRef,
+        state,
+        room,
         players,
         items,
         itemsScoredCount,
@@ -80,6 +82,7 @@ export function GameCanvas() {
         error: colyseusError,
         sendInput,
         addAiPlayer,
+        arenaStateRef,
     } = colyseusState;
 
     const { inputVector } = useInputManager();
@@ -109,8 +112,9 @@ export function GameCanvas() {
         pixiRefs, // Pass the ref object
         mapInstance: mapInstanceRef, // Pass the map instance ref object
         sessionId: sessionIdRef.current, // Pass the current value (string | null)
-        players,
-        items,
+        arenaStateRef: colyseusState.arenaStateRef, // Pass the ref
+        players, // Keep passing for now, might remove later
+        items, // Keep passing for now, might remove later
         isConnected,
         sendInput,
         inputVector,
@@ -153,6 +157,7 @@ export function GameCanvas() {
                         mapInstance={mapInstanceRef.current}
                         apiKey={API_KEY}
                         onResultSelected={handleLocationSelected}
+                        room={room}
                     />
                 </div>
             )}

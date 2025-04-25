@@ -22,7 +22,8 @@ interface ColyseusHookInternalState {
 
 // Define the shape of the object returned by the hook
 export interface UseColyseusReturn {
-    sessionIdRef: React.RefObject<string | null>; // Expose the RefObject
+    sessionIdRef: React.RefObject<string | null>;
+    arenaStateRef: React.RefObject<ArenaState | null>;
     players: Map<string, Player>;
     items: FlagState[];
     itemsScoredCount: number;
@@ -31,9 +32,9 @@ export interface UseColyseusReturn {
     isConnected: boolean;
     error: string | null;
     sendInput: (input: { dx: number; dy: number }) => void;
-    addAiPlayer: (team: 'Red' | 'Blue') => void; // Renamed for clarity
-    client: Client | null; // Expose client if needed for advanced use
-    room: Room<ArenaState> | null; // Expose room ref if needed
+    addAiPlayer: (team: 'Red' | 'Blue') => void;
+    client: Client | null;
+    room: Room<ArenaState> | null;
 }
 
 export function useColyseus(): UseColyseusReturn {
@@ -47,15 +48,15 @@ export function useColyseus(): UseColyseusReturn {
         error: null,
         itemsScoredCount: 0,
     });
-    const sessionIdRef = useRef<string | null>(null); // Ref to store the session ID string
+    const sessionIdRef = useRef<string | null>(null);
     const isMounted = useRef(false);
     const colyseusClient = useRef<Client | null>(null);
     const roomRef = useRef<Room<ArenaState> | null>(null);
     const connectionAttempted = useRef(false);
+    const arenaStateRef = useRef<ArenaState | null>(null);
 
     const connect = useCallback(async () => {
         console.log("---> [useColyseus connect ENTERED]");
-        // Prevent multiple concurrent calls
         if (connectionAttempted.current) {
             console.log("---> [useColyseus connect] Already attempting connection, skipping.");
             return;
@@ -64,11 +65,10 @@ export function useColyseus(): UseColyseusReturn {
 
         if (roomRef.current || !isMounted.current) {
             console.log("---> [useColyseus connect] Room exists or component unmounted, skipping.");
-            connectionAttempted.current = false; // Reset flag if skipping
+            connectionAttempted.current = false;
             return;
         }
 
-        // Get/Set Session Tab ID using sessionStorage
         let tabId = sessionStorage.getItem(SESSION_TAB_ID_KEY);
         if (!tabId) {
             tabId = uuidv4();
@@ -82,11 +82,10 @@ export function useColyseus(): UseColyseusReturn {
         colyseusClient.current = new Client(COLYSEUS_ENDPOINT);
 
         try {
-            // Pass the tabId to the server as persistentPlayerId
             const joinOptions = { persistentPlayerId: tabId };
             const room = await colyseusClient.current.joinOrCreate<ArenaState>('arena', joinOptions);
             roomRef.current = room;
-            sessionIdRef.current = room.sessionId; // <-- Store session ID in the ref
+            sessionIdRef.current = room.sessionId;
 
             console.log(`[useColyseus] Joined room: ${room.id}, Session ID: ${sessionIdRef.current}, Tab ID: ${tabId}`);
 
@@ -97,11 +96,12 @@ export function useColyseus(): UseColyseusReturn {
                 error: null,
             }));
 
-            // --- State Change Listener ---
             room.onStateChange((newState: ArenaState) => {
                  if (!isMounted.current) return;
-                const scoredCount = newState.items.filter((item: FlagState) => item.status === 'scored').length;
-                setInternalState(prevState => ({
+                 console.log('[useColyseus onStateChange] Received new state:', newState);
+                 arenaStateRef.current = newState;
+                 const scoredCount = newState.items.filter((item: FlagState) => item.status === 'scored').length;
+                 setInternalState(prevState => ({
                     ...prevState,
                     players: new Map(newState.players.entries()),
                     items: Array.from(newState.items.values()),
@@ -111,30 +111,44 @@ export function useColyseus(): UseColyseusReturn {
                 }));
             });
 
-            // --- Message Listeners ---
+            console.log('[useColyseus Post-Join] Initial room state:', roomRef.current?.state);
+
+            if (roomRef.current?.state) {
+                const initialState = roomRef.current.state;
+                arenaStateRef.current = initialState;
+                const initialScoredCount = initialState.items.filter((item: FlagState) => item.status === 'scored').length;
+                setInternalState(prevState => ({
+                    ...prevState,
+                    players: new Map(initialState.players.entries()),
+                    items: Array.from(initialState.items.values()),
+                    scores: { red: initialState.redScore, blue: initialState.blueScore },
+                    gameTimeRemaining: initialState.gameTimeRemaining,
+                    itemsScoredCount: initialScoredCount,
+                    isConnected: prevState.isConnected,
+                    error: prevState.error
+                }));
+                console.log('[useColyseus Post-Join] Manually set initial arenaStateRef and derived state.');
+            }
+
             room.onMessage("water_reset", () => {
                  if (!isMounted.current) return;
                  console.log("[useColyseus] Received water_reset message!");
-                 // TODO: Need a way to bubble this up or handle side effect (e.g., callback prop)
-                 // For now, just logging it here.
             });
 
             room.onMessage('debug_steal_check_positions', (_message) => {
-                // TODO: Implement visualization for debugging steal checks
-                // console.log("Debug Steal Check Positions:", message);
             });
 
             room.onMessage('flag_scored', (message) => {
                 console.log('[useColyseus] Received flag_scored:', message);
             });
 
-            // --- Lifecycle Listeners ---
             room.onLeave((code: number) => {
                 console.log(`[useColyseus] Left room with code: ${code}`);
                 roomRef.current = null;
-                sessionIdRef.current = null; // <-- Clear session ID ref on leave
+                sessionIdRef.current = null;
+                arenaStateRef.current = null;
                  if (!isMounted.current) return;
-                 setInternalState({ // Reset state fully on leave
+                 setInternalState({
                      room: null,
                      players: new Map(),
                      items: [],
@@ -148,43 +162,45 @@ export function useColyseus(): UseColyseusReturn {
 
             room.onError((code: number, message?: string) => {
                  console.error(`[useColyseus] Room error (code ${code}): ${message}`);
+                 arenaStateRef.current = null;
                  if (!isMounted.current) return;
-                  // Don't clear sessionIdRef here, might still be valid for reconnect attempts?
-                  // Only clear on explicit leave or unmount.
                  setInternalState(prevState => ({
                      ...prevState,
                      isConnected: false,
                      error: `Room error ${code}: ${message || 'Unknown error'}`,
+                     players: new Map(),
+                     items: [],
+                     scores: { red: 0, blue: 0 },
+                     gameTimeRemaining: undefined,
                      itemsScoredCount: 0,
                  }));
              });
 
         } catch (e: any) {
             console.error("[useColyseus] Failed to join or create room:", e);
+             arenaStateRef.current = null;
              if (!isMounted.current) return;
-            // Don't clear sessionIdRef here on initial connection failure
             setInternalState(prevState => ({
                 ...prevState,
                 isConnected: false,
                 error: e.message || "Failed to connect",
                 itemsScoredCount: 0,
+                 players: new Map(),
+                 items: [],
+                 scores: { red: 0, blue: 0 },
+                 gameTimeRemaining: undefined,
             }));
         } finally {
-            console.log("---> [useColyseus connect EXITING]"); // Log exit
-            // Reset flag only if connection failed? Or always?
-            // Let's reset always for now to allow retries if needed,
-            // but this might need adjustment if retries cause issues.
+            console.log("---> [useColyseus connect EXITING]");
             connectionAttempted.current = false;
         }
-    }, []); // No dependencies, relies on refs
+    }, []);
 
     const leave = useCallback(() => {
         if (roomRef.current) {
             console.log("[useColyseus] Leaving room manually...");
-            roomRef.current.leave(); // Colyseus handles cleanup and triggers onLeave
+            roomRef.current.leave();
         }
-        // Reset state immediately if desired, though onLeave will also do it
-        // setState({ ...initial state... });
     }, []);
 
     const sendInput = useCallback((input: { dx: number, dy: number }) => {
@@ -193,7 +209,6 @@ export function useColyseus(): UseColyseusReturn {
         }
     }, [internalState.isConnected]);
 
-    // Renamed function for clarity
     const addAiPlayer = useCallback((team: 'Red' | 'Blue') => {
         if (roomRef.current && internalState.isConnected) {
              console.log(`[useColyseus] Sending request to add ${team} AI...`);
@@ -206,21 +221,21 @@ export function useColyseus(): UseColyseusReturn {
     useEffect(() => {
         isMounted.current = true;
         console.log("---> [useColyseus useEffect Mount] Attempting initial connect.");
-        // Reset flag on mount, just in case
         connectionAttempted.current = false;
-        connect(); // Attempt connection on mount
+        connect();
 
         return () => {
             isMounted.current = false;
-            leave(); // Ensure leave is called on unmount
-            colyseusClient.current = null; // Clean up client ref
-            sessionIdRef.current = null; // <-- Clear ref on unmount
+            arenaStateRef.current = null;
+            leave();
+            colyseusClient.current = null;
+            sessionIdRef.current = null;
         };
-    }, [connect, leave]); // Include connect and leave in dependency array
+    }, [connect, leave]);
 
-    // Expose necessary state and actions according to UseColyseusReturn interface
     return {
-        sessionIdRef, // Return the RefObject
+        sessionIdRef,
+        arenaStateRef,
         players: internalState.players,
         items: internalState.items,
         itemsScoredCount: internalState.itemsScoredCount,
@@ -229,8 +244,8 @@ export function useColyseus(): UseColyseusReturn {
         isConnected: internalState.isConnected,
         error: internalState.error,
         sendInput,
-        addAiPlayer, // Use renamed function
-        client: colyseusClient.current, // Expose client ref's current value
-        room: roomRef.current // Expose room ref's current value
+        addAiPlayer,
+        client: colyseusClient.current,
+        room: roomRef.current
     };
 }

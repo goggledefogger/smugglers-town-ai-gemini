@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Import constants, helpers, and controllers
 import * as Constants from "./config/constants";
 import * as ServerConstants from "./config/constants"; // Alias server-specific constants
+import * as SharedConstants from "@smugglers-town/shared-utils"; // Correct import for Shared Constants
 import { NUM_ITEMS, lerp, angleLerp, distSq, PLAYER_EFFECTIVE_RADIUS } from "@smugglers-town/shared-utils"; // Import shared utils, including PLAYER_EFFECTIVE_RADIUS
 import { updateAIState } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
@@ -58,12 +59,17 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.gameTimeRemaining = GAME_DURATION_SECONDS;
     this.state.baseRadius = Math.sqrt(ServerConstants.BASE_RADIUS_SQ); // Initialize baseRadius from constant
 
+    // Set initial world origin (Times Square)
+    this.state.worldOriginLat = SharedConstants.ORIGIN_LAT;
+    this.state.worldOriginLng = SharedConstants.ORIGIN_LNG;
+
     this.playerRoadStatusCache = new Map<string, RoadStatus>();
 
     this.resetRound(); // Initialize items
 
     console.log(`Game timer initialized to ${this.state.gameTimeRemaining} seconds.`);
     console.log(`Base radius initialized to ${this.state.baseRadius.toFixed(1)} meters.`); // Log base radius
+    console.log(`Initial world origin set to Lat: ${this.state.worldOriginLat}, Lng: ${this.state.worldOriginLng}`); // Log initial origin
 
     // Register message handlers
     this.registerMessageHandlers();
@@ -190,7 +196,8 @@ export class ArenaRoom extends Room<ArenaState> {
             this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, lastQueryTime: now });
 
             try {
-                const [lon, lat] = worldToGeo(player.x, player.y);
+                // Pass the current world origin from the state to worldToGeo
+                const [lon, lat] = worldToGeo(player.x, player.y, this.state.worldOriginLng, this.state.worldOriginLat);
                 // console.log(`[${player.name}] Triggering road query at ${lat}, ${lon}`); // Debug
                 getMapFeaturesAtPoint(lon, lat)
                     .then(apiResponse => {
@@ -289,6 +296,20 @@ export class ArenaRoom extends Room<ArenaState> {
 
     this.onMessage("add_ai", (client, message: { team: "Red" | "Blue" }) => {
       this.handleAddAIRequest(client, message.team);
+    });
+
+    // Handler for changing the game world origin
+    this.onMessage("set_world_origin", (client, message: { lat: number; lng: number }) => {
+        // Basic validation
+        if (typeof message?.lat !== 'number' || typeof message?.lng !== 'number') {
+            console.warn(`[${client.sessionId}] Received invalid data for set_world_origin:`, message);
+            return;
+        }
+        // Add rate limiting? Maybe later.
+
+        // TODO: Add permission check? Only allow certain players/conditions to reset?
+        console.log(`[${client.sessionId}] Received set_world_origin request: Lat=${message.lat}, Lng=${message.lng}`);
+        this.resetGame(message);
     });
   }
 
@@ -507,6 +528,55 @@ export class ArenaRoom extends Room<ArenaState> {
         const newItem = this.spawnNewItem(newItemId);
         this.state.items.push(newItem);
     }
+  }
+
+  private resetGame(newOrigin: { lat: number; lng: number }): void {
+    console.log(`[ArenaRoom] Executing resetGame to origin: Lat=${newOrigin.lat}, Lng=${newOrigin.lng}`);
+
+    // 1. Update World Origin in State
+    this.state.worldOriginLat = newOrigin.lat;
+    this.state.worldOriginLng = newOrigin.lng;
+    console.log(" -> Updated state world origin.");
+
+    // 2. Reset Scores and Timer
+    this.state.redScore = 0;
+    this.state.blueScore = 0;
+    this.state.gameTimeRemaining = GAME_DURATION_SECONDS;
+    console.log(" -> Reset scores and game timer.");
+
+    // 3. Reset Player Positions and States
+    this.state.players.forEach((player, sessionId) => {
+        // Use Shared Utils Constants for base positions
+        const basePos = player.team === 'Red' ? SharedConstants.RED_BASE_POS : SharedConstants.BLUE_BASE_POS;
+        // Spawn near base, not exactly on it
+        const angle = Math.random() * Math.PI * 2;
+        // Use Server Constants for player spawn radius relative to base
+        const radius = Math.random() * ServerConstants.PLAYER_SPAWN_RADIUS;
+        player.x = basePos.x + Math.cos(angle) * radius;
+        player.y = basePos.y + Math.sin(angle) * radius;
+        player.vx = 0;
+        player.vy = 0;
+        player.heading = 0;
+        player.isOnRoad = false; // Reset road status
+        // Clear carried item status (important if reset happens mid-carry)
+        this.state.items.forEach(item => {
+            if (item.carrierId === sessionId) {
+                item.carrierId = null;
+                item.status = 'available'; // Or maybe 'dropped'? Let's stick to available for a full reset.
+                // Item position will be reset in the next step
+            }
+        });
+        // Reset velocity in internal map too
+        this.playerVelocities.set(sessionId, { vx: 0, vy: 0 });
+        this.playerRoadStatusCache.delete(sessionId); // Clear cached road status
+
+        console.log(`  -> Reset player ${player.name} (${sessionId}) to pos (${player.x.toFixed(1)}, ${player.y.toFixed(1)}) near ${player.team} base.`);
+    });
+
+    // 4. Clear and Respawn Items (using existing resetRound logic)
+    this.resetRound();
+
+    console.log("[ArenaRoom] resetGame completed.");
   }
 }
 

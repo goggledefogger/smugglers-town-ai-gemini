@@ -31,6 +31,10 @@ export class ArenaState extends Schema {
   @type("number") blueScore: number = 0;
   @type("number") gameTimeRemaining: number = 300; // e.g., 5 minutes = 300 seconds
 
+  // Add world origin coordinates
+  @type("number") worldOriginLat: number = 0; // Latitude of the world origin
+  @type("number") worldOriginLng: number = 0; // Longitude of the world origin
+
   // Multiple items
   @type([ FlagState ]) items = new ArraySchema<FlagState>();
 

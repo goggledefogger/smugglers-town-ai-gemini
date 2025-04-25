@@ -98,7 +98,6 @@ export function useColyseus(): UseColyseusReturn {
 
             room.onStateChange((newState: ArenaState) => {
                  if (!isMounted.current) return;
-                 console.log('[useColyseus onStateChange] Received new state:', newState);
                  arenaStateRef.current = newState;
                  const scoredCount = newState.items.filter((item: FlagState) => item.status === 'scored').length;
                  setInternalState(prevState => ({

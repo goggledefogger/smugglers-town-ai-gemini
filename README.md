@@ -168,6 +168,24 @@ The client uses three distinct layers for rendering visuals:
             4. The PixiJS hook calculates the sprite's screen position dynamically based on the passed dimension and desired margins (e.g., `arrowScreenY = HUD_TOP_OFFSET + hudHeight + ARROW_MARGIN`). This avoids hardcoded pixel values and ensures the PixiJS element adapts to the UI element's size.
         *   **Third-Party Component Styling (e.g., Location Search):** Integrating third-party UI components (like the MapTiler Geocoding control) into the floating panel style required specific CSS overrides in `src/index.css` to force transparency on its internal elements and apply custom background/hover effects to its container, ensuring visual consistency.
 
+#### Location Changing & World Origin
+
+Changing the active game location involves coordinating the server's world origin with the client's map view:
+
+1.  **World Origin:** The server maintains a `worldOriginLng` and `worldOriginLat` in its `ArenaState`. All game object positions (players, items) are relative to this origin in meters.
+2.  **Location Search:** The `LocationSearch` component (using MapTiler Geocoding) allows users to find and select new locations.
+3.  **Client Action (`pick` event):** When a user *picks* a final location:
+    *   The `set_world_origin` message is sent to the server with the new coordinates.
+    *   The `onResultSelected` callback is triggered, telling `GameCanvas` to temporarily set `isFollowingPlayer` to `false`.
+    *   The Geocoding control's built-in `flyTo` animation handles the visual map transition.
+4.  **Server Update:** The server receives `set_world_origin`, updates its `ArenaState`, and broadcasts the change to all clients.
+5.  **Animation End (`moveend` event):** Once the control's `flyTo` finishes:
+    *   The `mapInstance.setZoom(19)` call ensures the correct final zoom level.
+    *   The `onNavigationFinished` callback is triggered, telling `GameCanvas` to set `isFollowingPlayer` back to `true`.
+6.  **Synchronization:** The client's game loop (`useGameLoop`) now uses the updated `worldOriginLng`/`Lat` from the server state to correctly calculate sprite positions relative to the new map center. Player following resumes, keeping the local player centered in the view at the correct zoom level.
+
+This process ensures that the game simulation remains synchronized with the server's authoritative state while providing a smooth visual transition for the user initiating the change.
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request. (Placeholder - specific guidelines can be added later).

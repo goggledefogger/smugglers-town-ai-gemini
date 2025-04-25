@@ -107,6 +107,13 @@ export function GameCanvas() {
     }, []); // Empty dependency array: function identity is stable
     // -------------------------------------------
 
+    // --- Callback to re-enable following after map navigation ---
+    const handleNavigationFinished = useCallback(() => {
+        console.log("[GameCanvas] Map navigation finished, re-enabling player follow.");
+        setIsFollowingPlayer(true);
+    }, []); // Empty dependency array: function identity is stable
+    // -----------------------------------------------------------
+
     // --- Game Loop Hook --- (Run after other hooks have initialized)
     useGameLoop({
         pixiRefs, // Pass the ref object
@@ -157,6 +164,7 @@ export function GameCanvas() {
                         mapInstance={mapInstanceRef.current}
                         apiKey={API_KEY}
                         onResultSelected={handleLocationSelected}
+                        onNavigationFinished={handleNavigationFinished}
                         room={room}
                     />
                 </div>

@@ -9,7 +9,8 @@ import { ArenaState } from '@smugglers-town/shared-schemas'; // Import ArenaStat
 interface LocationSearchProps {
     apiKey: string;
     mapInstance: maplibregl.Map | null;
-    onResultSelected?: () => void; // Callback when a result is selected
+    onResultSelected?: () => void; // Callback when a result is selected (-> disables following)
+    onNavigationFinished?: () => void; // Callback when flyTo animation ends (-> enables following)
     room: Room<ArenaState> | null; // Add room prop
     // Add other options if needed
     controlOptions?: Partial<GeocodingControlOptions>;
@@ -19,6 +20,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
     apiKey,
     mapInstance,
     onResultSelected,
+    onNavigationFinished, // Add new prop
     room,
     controlOptions
 }: LocationSearchProps) => {
@@ -35,7 +37,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
             apiKey: apiKey,
             maplibregl: maplibregl,
             marker: false,
-            flyTo: false, // Disable built-in flyTo
+            flyTo: { speed: 1.8 }, // Re-enable built-in flyTo with original speed
             placeholder: "Search Location...",
             ...(controlOptions || {}),
         });
@@ -64,10 +66,19 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
                         console.log(`Sending set_world_origin: Lat=${lat}, Lng=${lng}`);
                         room.send("set_world_origin", { lat, lng });
 
-                        // Fly map to the selected location with desired zoom
+                        // Keep listening for the end of the (now control-driven) flight animation
                         if (mapInstance) {
-                            const desiredZoom = 19; // Use the same zoom as initial load
-                            mapInstance.flyTo({ center: [lng, lat], zoom: desiredZoom, speed: 1.8 });
+                            mapInstance.once('moveend', () => {
+                                console.log("[LocationSearch] Control's flyTo animation finished (moveend).");
+                                // Set the desired zoom level *after* the animation
+                                const desiredZoom = 19;
+                                mapInstance.setZoom(desiredZoom);
+                                console.log(`[LocationSearch] Manually set zoom to ${desiredZoom} after moveend.`);
+
+                                if (onNavigationFinished) {
+                                    onNavigationFinished(); // Signal that navigation is done
+                                }
+                            });
                         }
                     } else {
                         console.warn("Invalid coordinates in picked feature center:", featureCenter);
@@ -112,7 +123,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
             }
         };
         // Ensure effect runs only when map or key changes
-    }, [mapInstance, apiKey, controlOptions, onResultSelected, room]); // Add room to dependency array
+    }, [mapInstance, apiKey, controlOptions, onResultSelected, onNavigationFinished, room]); // Add room and onNavigationFinished to dependency array
 
     // No need to render a container, MapLibre handles placement
     return null;

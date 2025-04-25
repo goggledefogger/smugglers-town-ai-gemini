@@ -48,6 +48,9 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Refactor input handling for modularity (Keyboard/Gamepad) and add Gamepad support
 - [x] Add visual effect for driving off-road (e.g., dust clouds using Pixi.Graphics triggered by server state)
 - [x] Add location search bar to recenter map view (using MapTiler Geocoding control)
+    - [x] Fixed server world origin synchronization on location select (`set_world_origin` message)
+    - [x] Fixed map navigation (`flyTo`) and zoom level on location select
+    - [x] Fixed map centering to re-follow player after location change animation
 - [x] Refine UI layout and transparency for floating panels (HUD, Controls, Status, Search)
 
 ## In Progress Tasks

@@ -21,7 +21,7 @@ import { FloatingPanel } from '../components/FloatingPanel';
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 
 // Default map style ID for initial rendering
-const DEFAULT_MAP_STYLE_ID = 'streets-v2';
+const DEFAULT_MAP_STYLE_ID = 'winter-v2';
 
 export function GameCanvas() {
     // --- Refs --- (Keep separate from state if not causing re-renders)

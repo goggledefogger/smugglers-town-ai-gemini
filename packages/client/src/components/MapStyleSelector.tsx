@@ -5,14 +5,22 @@ interface MapStyle {
   name: string;
 }
 
-// Define a few initial styles based on MapTiler documentation
+// Define styles based on the screenshot from https://cloud.maptiler.com/maps/
 const availableStyles: MapStyle[] = [
-  { id: 'streets-v2', name: 'Streets' },
-  { id: 'hybrid', name: 'Satellite' }, // Hybrid includes labels
+  { id: 'aquarelle', name: 'Aquarelle' },
+  { id: 'backdrop', name: 'Backdrop' },
   { id: 'basic-v2', name: 'Basic' },
+  { id: 'bright-v2', name: 'Bright' },
+  { id: 'dataviz', name: 'Dataviz' },
+  { id: 'landscape', name: 'Landscape' },
+  { id: 'ocean', name: 'Ocean' },
+  { id: 'openstreetmap', name: 'OpenStreetMap' },
   { id: 'outdoor-v2', name: 'Outdoor' },
-  { id: 'streets-v2-dark', name: 'Streets Dark' },
-  // Add more styles here as needed
+  { id: 'satellite', name: 'Satellite' }, // Using standard satellite, not hybrid
+  { id: 'streets-v2', name: 'Streets' },
+  { id: 'toner-v2', name: 'Toner' },
+  { id: 'topo-v2', name: 'Topo' },
+  { id: 'winter-v2', name: 'Winter' },
 ];
 
 interface MapStyleSelectorProps {
@@ -24,30 +32,31 @@ const MapStyleSelector: React.FC<MapStyleSelectorProps> = ({
   currentStyleId,
   onStyleChange,
 }) => {
-  // Base button style from our design system concept
-  const baseButtonStyle = "block w-full text-left px-2 py-1 rounded transition-colors duration-150";
+  const handleSelectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    onStyleChange(event.target.value);
+  };
 
   return (
     // REMOVED inline style for position, rely on parent container
     <div
       // style={{ position: 'absolute', top: '8rem', right: '1rem' }} // Position below AI Controls
-      className="p-2 rounded text-white text-xs space-y-1 shadow-md z-30 w-full" // Removed bg-gray-800 bg-opacity-70
+      className="p-2 rounded text-white text-xs shadow-md z-30 w-full" // Removed space-y-1
     >
-      <span className="block font-bold mb-1">Map Style:</span>
-      {availableStyles.map((style) => (
-        <button
-          key={style.id}
-          onClick={() => onStyleChange(style.id)}
-          // Apply base button style and conditional active style
-          className={`${baseButtonStyle} ${
-            currentStyleId === style.id
-              ? 'bg-blue-600 font-semibold' // Active state
-              : 'bg-gray-700 hover:bg-gray-600' // Default state
-          }`}
-        >
-          {style.name}
-        </button>
-      ))}
+      <label className="block font-bold mb-1" htmlFor="map-style-select">Map Style:</label>
+      {/* Use a select dropdown instead of buttons */}
+      <select
+        id="map-style-select"
+        value={currentStyleId}
+        onChange={handleSelectChange}
+        // Style the select to match the theme (dark background, white text)
+        className="block w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+      >
+        {availableStyles.map((style) => (
+          <option key={style.id} value={style.id}>
+            {style.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 };

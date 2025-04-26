@@ -32,6 +32,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Refactor server room logic into separate modules (constants, helpers, controllers, rules)
 - [x] Implement manual AI spawning via client message (`add_ai`)
 - [x] Add basic UI buttons for triggering AI spawn
+- [x] Add visual feedback (temporary disable/loading state) to AI spawn buttons
 - [x] Add navigation arrow HUD element pointing towards the current objective (item, carrier, or base)
 - [x] Modify scoring: Make Red/Blue scores persistent totals across rounds
 - [x] Restructure project into packages (client, server, shared-utils, shared-schemas)
@@ -44,6 +45,9 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Allow item transfer on collision between teammates (removed team check)
 - [x] Implement initial client-side UI design system using Tailwind CSS (panels, buttons)
 - [x] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
+- [x] Add more MapTiler map styles based on screenshot
+- [x] Change Map Style selector from buttons to dropdown
+- [x] Set default map style (Backdrop -> Winter)
 - [x] Fix vortex visual effect to appear at the precise location where the toilet was returned (scored), not at the center of the base or attached to the car
 - [x] Refactor input handling for modularity (Keyboard/Gamepad) and add Gamepad support
 - [x] Add visual effect for driving off-road (e.g., dust clouds using Pixi.Graphics triggered by server state)
@@ -106,8 +110,8 @@ The game uses a server-authoritative architecture with client-side interpolation
 
 - ✅ `client/src/features/GameCanvas.tsx`: Main React component handling map/canvas rendering, Pixi setup, game loop, input handling, and Colyseus connection/state updates, **and rendering UI components (HUD, AIControls)**. Includes coordinate conversion, interpolation, and logic for correct initial sprite placement after connection/refresh.
 - ✅ `client/src/components/HUD.tsx`: Displays game scores **and timer**.
-- ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players.
-- ✅ `client/src/components/MapStyleSelector.tsx`: UI component for selecting map styles.
+- ✅ `client/src/components/AIControls.tsx`: Displays buttons to add AI players **with temporary disabled state feedback on click**.
+- ✅ `client/src/components/MapStyleSelector.tsx`: UI component for selecting map styles **(uses dropdown, includes styles from MapTiler screenshot)**.
 - ✅ `client/src/hooks/...`: Various hooks for Colyseus connection, input, map, Pixi app, and game loop logic.
 - ✅ `client/src/hooks/usePixiApp.ts`: Manages PixiJS application setup, sprite creation (including navigation arrow with shadow filter).
 - ✅ `client/src/hooks/useGameLoop.ts`: Handles the main game loop, including sprite position/rotation updates (local sprite centered when following), map centering, and item/base rendering.

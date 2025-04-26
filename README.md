@@ -157,13 +157,13 @@ The client uses three distinct layers for rendering visuals:
     *   Includes a dynamic navigation arrow fixed to the top-center of the screen, pointing towards the current objective (item, carrier, or player's base).
 
 3.  **HUD/Static UI Layer (React/HTML/CSS):**
-    *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, buttons, status messages, search bar).
+    *   **Purpose:** Displays informational elements and controls *not* tied to specific world locations (scores, timers, status messages, controls like AI spawn buttons, map style dropdown, location search bar).
     *   **Technology:** Standard React components, HTML, CSS (Tailwind).
     *   **Coordinates:** Standard CSS positioning (relative to the viewport/container).
     *   **Updates:** Driven by React state changes based on server data or user input.
     *   **Positioning Strategy:**
-        *   **Floating Panel Containers:** The main containers for floating UI elements (e.g., the `div` holding the HUD, the `div` holding the right-side controls, the `div` holding the search bar in `GameCanvas.tsx`) use **inline `style` props** for absolute positioning relative to the viewport (`position: 'absolute'`, `top`, `left`, `right`, `bottom`, `transform`). This provides reliable placement over the map/canvas layers.
-        *   **Internal Component Layout:** Components *inside* these containers (e.g., `HUD`, `AIControls`, `MapStyleSelector`, `FloatingPanel`) use standard layout methods (like Flexbox, often via Tailwind utilities like `flex`, `gap`, `p-*`, `rounded`, etc.) to arrange their own content. They do **not** typically define their own absolute positioning.
+        *   **Floating Panel Containers:** The main containers for floating UI elements (e.g., the `div` holding the HUD, the `div` holding the right-side controls including AI buttons and the map style dropdown, the `div` holding the location search bar in `GameCanvas.tsx`) use **inline `style` props** for absolute positioning relative to the viewport (`position: 'absolute'`, `top`, `left`, `right`, `bottom`, `transform`). This provides reliable placement over the map/canvas layers.
+        *   **Internal Component Layout:** Components *inside* these containers (e.g., `HUD`, `AIControls`, `MapStyleSelector`, `FloatingPanel`) use standard layout methods (like Flexbox or simple stacking, often via Tailwind utilities like `flex`, `gap`, `p-*`, `rounded`, etc.) to arrange their own content. They do **not** typically define their own absolute positioning.
         *   **React-to-PixiJS Positioning (e.g., Navigation Arrow):** For PixiJS elements (like the navigation arrow) that need to be positioned relative to React UI elements (like the HUD), a measurement approach is used:
             1. A React `ref` is attached to the relevant UI element container (e.g., the HUD's wrapper `div`).
             2. A `useEffect` hook measures the element's dimensions (`offsetHeight`).
@@ -176,7 +176,7 @@ The client uses three distinct layers for rendering visuals:
 Changing the active game location involves coordinating the server's world origin with the client's map view:
 
 1.  **World Origin:** The server maintains a `worldOriginLng` and `worldOriginLat` in its `ArenaState`. All game object positions (players, items) are relative to this origin in meters.
-2.  **Location Search:** The `LocationSearch` component (using MapTiler Geocoding) allows users to find and select new locations.
+2.  **Location Search:** The `LocationSearch` component (using MapTiler Geocoding) allows users to find and select new locations via a search bar UI element.
 3.  **Client Action (`pick` event):** When a user *picks* a final location:
     *   The `set_world_origin` message is sent to the server with the new coordinates.
     *   The `onResultSelected` callback is triggered, telling `GameCanvas` to temporarily set `isFollowingPlayer` to `false`.

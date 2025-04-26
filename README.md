@@ -21,7 +21,10 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Initial state definition for scores and a single generic pickup item.
 - Server-side collision detection (player-item, player-player, player-base).
 - Core gameplay loop: Generic item pickup, player-vs-player item stealing, scoring by returning the item to team base.
-- Basic server-side AI opponent with simple targeting logic (pursues item carrier or item, returns to base).
+- Basic server-side AI opponent using a Finite State Machine (`SEEKING_ITEM`, `PURSUING_CARRIER`, `RETURNING_TO_BASE`):
+    - Prioritizes pursuing opponent carriers.
+    - Seeks closest available items if no opponent has one.
+    - Returns to base if it has an item OR if no opponents/items are available (preventing targeting teammates with items).
 - Basic server-side physics response for player-player collisions (bouncing).
 - Item transfer occurs on any player-player collision (including teammates), respecting cooldown.
 - Enforced one-item-per-player limit: Players can no longer pick up or steal additional items while already carrying one.

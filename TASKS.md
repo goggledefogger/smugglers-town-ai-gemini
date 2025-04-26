@@ -67,14 +67,14 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 
 - [ ] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
 - [ ] **AI Improvements (Phase 1: Decision Making & Teamwork):**
-    - [ ] Refactor AI logic into a Finite State Machine (FSM) or similar structure.
+    - [x] Refactor AI logic into a Finite State Machine (FSM) or similar structure (`aiController`, `aiStateMachine`, `aiActions`).
     - **Decision Making:**
-        - [ ] Implement basic states: `SEEK_ITEM`, `PURSUE_CARRIER`, `RETURN_TO_BASE`.
+        - [x] Implement basic states: `SEEK_ITEM`, `PURSUE_CARRIER`, `RETURN_TO_BASE`.
         - [ ] Implement `INTERCEPT` state: Move towards opponent's path if they have the item.
-        - [ ] Improve target prioritization (e.g., closest item if multiple free).
+        - [x] Improve target prioritization (e.g., closest item if multiple free, prioritize opponent carriers).
     - **Teamwork:**
-        - [ ] Implement AI awareness of teammate status (e.g., don't pursue if teammate has item).
-        - [ ] Implement basic `DEFEND`/`ESCORT` state: If teammate has item nearby, follow/protect.
+        - [x] Implement AI awareness of teammate status (AI prioritizes opponents/items over teammates with items, falls back to own base).
+        - [ ] Implement explicit `DEFEND`/`ESCORT` state: If teammate has item nearby, follow/protect.
 
 ## Future Tasks
 

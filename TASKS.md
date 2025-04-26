@@ -85,6 +85,21 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
     - Randomly select one pair of base locations at the start of each round/match.
     - Ensure initial item spawn locations are more spread out and potentially relative to base locations.
     - (Long term: Allow manual selection or POI-based placement).
+- [ ] **AI Improvements:**
+    - **Movement:**
+        - [ ] Implement road-aware pathfinding (e.g., A* on simplified road graph).
+        - [ ] Implement basic obstacle avoidance (e.g., using feelers/raycasts).
+        - [ ] Implement smoother turning/driving model similar to player physics.
+        - [ ] Ensure AI utilizes existing `isOnRoad` status for speed boost.
+    - **Decision Making (FSM/Behavior Tree):**
+        - [ ] Implement more advanced states (Intercept, Defend, Roam/Search).
+        - [ ] Improve target prioritization (closest item, threat assessment).
+    - **Teamwork:**
+        - [ ] Implement AI awareness of teammate status/objective.
+        - [ ] Explore coordinated roles (Attacker/Defender).
+    - **Difficulty:**
+        - [ ] Add tunable AI parameters (reaction time, accuracy, physics).
+        - [ ] Link difficulty levels to specific behaviors/parameter ranges.
 
 ## Implementation Plan
 

@@ -157,7 +157,6 @@ export function GameCanvas() {
                     <HUD
                         redScore={scores.red}
                         blueScore={scores.blue}
-                        localPlayerTeam={localPlayerTeam}
                         gameTimeRemaining={smoothedGameTime}
                         itemsScoredCount={itemsScoredCount}
                     />
@@ -167,7 +166,11 @@ export function GameCanvas() {
             {/* --- Absolute Positioned UI Elements --- */}
             <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 10 }} className="flex flex-col space-y-2 items-end">
                 <FloatingPanel className="rounded mb-1">
-                    <AIControls onAddAi={addAiPlayer} />
+                    <AIControls
+                        onAddAi={addAiPlayer}
+                        players={players}
+                        localPlayerTeam={localPlayerTeam}
+                    />
                 </FloatingPanel>
                 {API_KEY && mapInstanceRef.current && (
                     <FloatingPanel className="rounded mb-1">

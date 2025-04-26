@@ -5,7 +5,6 @@ interface HUDProps {
   redScore: number;
   blueScore: number;
   gameTimeRemaining: number | undefined; // Can be undefined initially
-  localPlayerTeam?: 'Red' | 'Blue';
   itemsScoredCount: number; // Replaced itemStatusString
 }
 
@@ -19,7 +18,7 @@ const formatTime = (totalSeconds: number | undefined): string => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, localPlayerTeam, itemsScoredCount }) => {
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, itemsScoredCount }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     display: 'flex',
@@ -45,12 +44,6 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, local
   const blueScoreStyle = { ...scoreStyle, color: '#60a5fa' }; // Tailwind blue-400 approx
   const redScoreStyle = { ...scoreStyle, color: '#f87171' }; // Tailwind red-400 approx
 
-  // Style for team indicator
-  const teamStyle: React.CSSProperties = {
-    padding: '0 10px',
-    fontWeight: 'bold',
-  };
-
   // Style for item count
   const itemCountStyle: React.CSSProperties = {
       textAlign: 'center',
@@ -59,17 +52,8 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, local
       fontVariantNumeric: 'tabular-nums',
   };
 
-  const playerTeamColor = localPlayerTeam === 'Red' ? redScoreStyle.color : localPlayerTeam === 'Blue' ? blueScoreStyle.color : 'white';
-
   return (
     <div style={hudStyle}>
-      {/* Display Player Team */}
-      {localPlayerTeam && (
-        <div style={{ ...teamStyle, color: playerTeamColor }}>
-          Team: {localPlayerTeam}
-        </div>
-      )}
-
       {/* Display Scores */}
       <div style={blueScoreStyle}>{blueScore}</div>
       {/* Placeholder Timer */}

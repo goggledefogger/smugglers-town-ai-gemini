@@ -66,6 +66,15 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 ## In Progress Tasks
 
 - [ ] Implement user selection of MapTiler map styles (investigate client-side vs server-side setting)
+- [ ] **AI Improvements (Phase 1: Decision Making & Teamwork):**
+    - [ ] Refactor AI logic into a Finite State Machine (FSM) or similar structure.
+    - **Decision Making:**
+        - [ ] Implement basic states: `SEEK_ITEM`, `PURSUE_CARRIER`, `RETURN_TO_BASE`.
+        - [ ] Implement `INTERCEPT` state: Move towards opponent's path if they have the item.
+        - [ ] Improve target prioritization (e.g., closest item if multiple free).
+    - **Teamwork:**
+        - [ ] Implement AI awareness of teammate status (e.g., don't pursue if teammate has item).
+        - [ ] Implement basic `DEFEND`/`ESCORT` state: If teammate has item nearby, follow/protect.
 
 ## Future Tasks
 
@@ -85,18 +94,12 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
     - Randomly select one pair of base locations at the start of each round/match.
     - Ensure initial item spawn locations are more spread out and potentially relative to base locations.
     - (Long term: Allow manual selection or POI-based placement).
-- [ ] **AI Improvements:**
+- [ ] **AI Improvements (Phase 2: Movement & Difficulty):**
     - **Movement:**
         - [ ] Implement road-aware pathfinding (e.g., A* on simplified road graph).
         - [ ] Implement basic obstacle avoidance (e.g., using feelers/raycasts).
         - [ ] Implement smoother turning/driving model similar to player physics.
         - [ ] Ensure AI utilizes existing `isOnRoad` status for speed boost.
-    - **Decision Making (FSM/Behavior Tree):**
-        - [ ] Implement more advanced states (Intercept, Defend, Roam/Search).
-        - [ ] Improve target prioritization (closest item, threat assessment).
-    - **Teamwork:**
-        - [ ] Implement AI awareness of teammate status/objective.
-        - [ ] Explore coordinated roles (Attacker/Defender).
     - **Difficulty:**
         - [ ] Add tunable AI parameters (reaction time, accuracy, physics).
         - [ ] Link difficulty levels to specific behaviors/parameter ranges.

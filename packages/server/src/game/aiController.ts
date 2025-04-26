@@ -4,9 +4,8 @@
  * Logic for updating AI player state (targeting and movement).
  */
 
-// import { calculateAngle } from "../utils/helpers"; // REMOVED - Incorrect import
-import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { lerp, angleLerp, RED_BASE_POS, BLUE_BASE_POS, isPointInRectangle } from "@smugglers-town/shared-utils"; // Removed distSq
+import { ArenaState, Player } from "@smugglers-town/shared-schemas";
+import { lerp, angleLerp, isPointInRectangle } from "@smugglers-town/shared-utils";
 import {
     MAX_SPEED,
     ACCELERATION,
@@ -14,28 +13,29 @@ import {
     TURN_SPEED,
     AI_SPEED_MULTIPLIER,
     ROAD_SPEED_MULTIPLIER,
-    // AI_TARGET_REFRESH_INTERVAL, // REMOVED - Incorrect import
-    // AI_COLLISION_THRESHOLD_SQ, // REMOVED - Incorrect import
-    BASE_RADIUS_SQ,
+    BASE_RADIUS_SQ, // Keep this if needed for logic elsewhere
     WATER_ZONE
 } from "../config/constants";
-
-// Helper function to calculate squared distance
-const distSq = (x1: number, y1: number, x2: number, y2: number): number => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    return dx * dx + dy * dy;
-};
+import { AIState } from "../ai/types";
+import { determineAIState } from "../ai/aiStateMachine";
+import {
+    getSeekItemTarget,
+    getPursueCarrierTarget,
+    getReturnToBaseTarget,
+    getInterceptTarget,
+    getDefendTarget
+} from "../ai/aiActions";
 
 // Factor to look ahead for road prediction
 const PREDICTION_LOOKAHEAD_FACTOR = 12;
 
 // Define type for velocity maps for clarity
 type PlayerVelocity = { vx: number; vy: number };
+type TargetCoordinates = { x: number; y: number }; // Keep local type if needed
 
 /**
  * Updates an AI player's position and heading based on game state.
- * Determines target, calculates velocity, and applies movement.
+ * Determines target using the state machine, calculates velocity, and applies movement.
  * Modifies the player state and velocity object directly.
  * Calculates the potential next position BEFORE applying it.
  * Uses the predicted road status from the PREVIOUS tick to determine speed for THIS tick.
@@ -50,61 +50,39 @@ export function updateAIState(
     predictedIsOnRoadFromLastTick: boolean, // RECEIVED from cache
     dt: number
 ): { nextX: number; nextY: number } { // RETURN predicted next pos FOR ROAD CHECK
-    let targetX: number | null = null;
-    let targetY: number | null = null;
-    let targetFound = false;
 
-    // 1. Determine Target (Multiple Items)
-    let currentTarget: FlagState | Player | { x: number, y: number } | null = null;
-    let minDistanceSq = Infinity;
+    // --- 1. Determine AI State and Target ---
+    const nextStateEnum = determineAIState(sessionId, aiPlayer, state);
+    aiPlayer.currentState = nextStateEnum; // Update player schema state
 
-    // Check if AI is carrying any item
-    const carriedItem = state.items.find((item: FlagState) => item.carrierId === sessionId);
+    let target: TargetCoordinates | null = null;
 
-    if (carriedItem) {
-        // AI has an item, target its own base
-        currentTarget = aiPlayer.team === "Red" ? RED_BASE_POS : BLUE_BASE_POS;
-        targetFound = true;
-    } else {
-        // Find nearest available/dropped item
-        state.items.forEach((item: FlagState) => {
-            if (item.status === 'available' || item.status === 'dropped') {
-                const dSq = distSq(aiPlayer.x, aiPlayer.y, item.x, item.y);
-                if (dSq < minDistanceSq) {
-                    minDistanceSq = dSq;
-                    currentTarget = item;
-                    targetFound = true;
-                }
-            }
-        });
-
-        // If no available item found, find nearest opponent carrier
-        if (!targetFound) {
-            minDistanceSq = Infinity; // Reset min distance for carrier search
-            state.items.forEach((item: FlagState) => {
-                if (item.status === 'carried' && item.carrierId) {
-                    const carrier = state.players.get(item.carrierId);
-                    if (carrier && carrier.team !== aiPlayer.team) {
-                        const dSq = distSq(aiPlayer.x, aiPlayer.y, carrier.x, carrier.y);
-                        if (dSq < minDistanceSq) {
-                            minDistanceSq = dSq;
-                            currentTarget = carrier;
-                            targetFound = true;
-                        }
-                    }
-                }
-            });
-        }
+    switch (aiPlayer.currentState) {
+        case AIState.SEEKING_ITEM:
+            target = getSeekItemTarget(aiPlayer, state);
+            break;
+        case AIState.PURSUING_CARRIER:
+            target = getPursueCarrierTarget(aiPlayer, state);
+            break;
+        case AIState.RETURNING_TO_BASE:
+            target = getReturnToBaseTarget(aiPlayer, state);
+            break;
+        case AIState.INTERCEPTING:
+            target = getInterceptTarget(aiPlayer, state);
+            break;
+        case AIState.DEFENDING:
+            target = getDefendTarget(aiPlayer, state);
+            break;
+        default:
+            console.warn(`[AI ${aiPlayer.name}] Unknown state: ${aiPlayer.currentState}. Falling back to SEEKING_ITEM.`);
+            target = getSeekItemTarget(aiPlayer, state); // Fallback
+            break;
     }
 
-    // Extract target coordinates if a target was found
-    if (targetFound && currentTarget) {
-        targetX = currentTarget.x;
-        targetY = currentTarget.y;
-    } else {
-        targetX = null; // No valid target
-        targetY = null;
-    }
+    const targetX = target ? target.x : null;
+    const targetY = target ? target.y : null;
+
+    // --- Existing Movement Logic (sections 2-8) ---
 
     // 2. Calculate Desired Velocity
     let targetVelX = 0;
@@ -120,23 +98,28 @@ export function updateAIState(
     if (targetX !== null && targetY !== null) {
         const dx = targetX - aiPlayer.x;
         const dy = targetY - aiPlayer.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        // Calculate squared distance for stopping check
+        const distSqToTarget = dx * dx + dy * dy;
+        const AI_STOPPING_DISTANCE_SQ = 0.01; // Use squared distance (0.1 * 0.1)
 
-        const AI_STOPPING_DISTANCE = 0.1; // Use a small default stopping distance
-        if (dist > AI_STOPPING_DISTANCE) { // Only move if not already at target
+        if (distSqToTarget > AI_STOPPING_DISTANCE_SQ) { // Only move if not already at target
+            const dist = Math.sqrt(distSqToTarget); // Calculate actual dist only when needed
             targetWorldDirX = dx / dist;
             targetWorldDirY = dy / dist;
             targetVelX = targetWorldDirX * currentAISpeedLimit;
             targetVelY = targetWorldDirY * currentAISpeedLimit;
         }
-    }
+    } // else: No target, targetVel remains 0
 
     // 3. Interpolate Velocity & Apply Friction
     const friction = Math.pow(FRICTION_FACTOR, dt);
     velocity.vx *= friction;
     velocity.vy *= friction;
 
-    const lerpFactor = Math.min(ACCELERATION * dt / currentAISpeedLimit, 1.0); // Use base ACCELERATION
+    // Ensure acceleration logic doesn't break if speed limit is 0 (shouldn't happen often)
+    const effectiveAcceleration = currentAISpeedLimit > 0 ? ACCELERATION * dt / currentAISpeedLimit : 1.0;
+    const lerpFactor = Math.min(effectiveAcceleration, 1.0);
+
     velocity.vx = lerp(velocity.vx, targetVelX, lerpFactor);
     velocity.vy = lerp(velocity.vy, targetVelY, lerpFactor);
 
@@ -180,19 +163,20 @@ export function updateAIState(
         // 7. Update Actual Position (if not in water)
         aiPlayer.x = actualNextX;
         aiPlayer.y = actualNextY;
+        // Reset justReset flag after successful movement outside water
+        if (aiPlayer.justReset) aiPlayer.justReset = false;
     }
 
     // 8. Update Heading
     let targetHeading = aiPlayer.heading;
+    // Only update heading if there was a target direction
     if (targetWorldDirX !== 0 || targetWorldDirY !== 0) {
         targetHeading = Math.atan2(targetWorldDirY, targetWorldDirX);
     }
     if (isFinite(targetHeading)) {
         const turnAmount = TURN_SPEED * dt; // Use base TURN_SPEED
         aiPlayer.heading = angleLerp(aiPlayer.heading, targetHeading, turnAmount);
-    } else {
-        // Maintain current heading if no target or invalid heading
-    }
+    } // else: Maintain current heading if no target or invalid heading
 
     // Return the calculated potential next position FOR THE ROAD CHECK
     return { nextX: predictedRoadCheckX, nextY: predictedRoadCheckY };

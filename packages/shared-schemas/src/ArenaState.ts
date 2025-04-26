@@ -10,6 +10,7 @@ export class Player extends Schema {
   @type("string") team: "Red" | "Blue" | "none" = "none"; // Use literal types
   @type("boolean") justReset: boolean = false; // Flag for water reset notification
   @type("boolean") isOnRoad: boolean = false; // Flag for if player is currently on a road (updated by server)
+  @type("uint8") currentState: number = 0; // AI State Machine State (0=SEEKING_ITEM)
   // Add other player-specific state later (e.g., score, hasPickup)
 }
 

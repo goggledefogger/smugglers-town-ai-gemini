@@ -6,19 +6,18 @@
 
 // import { calculateAngle } from "../utils/helpers"; // REMOVED - Incorrect import
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { lerp, angleLerp } from "@smugglers-town/shared-utils"; // Use shared utils
-import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils"; // Import shared constants
+import { lerp, angleLerp, RED_BASE_POS, BLUE_BASE_POS, isPointInRectangle } from "@smugglers-town/shared-utils"; // Removed distSq
 import {
     MAX_SPEED,
     ACCELERATION,
     FRICTION_FACTOR,
     TURN_SPEED,
     AI_SPEED_MULTIPLIER,
-    AI_ACCEL_MULTIPLIER,
     ROAD_SPEED_MULTIPLIER,
     // AI_TARGET_REFRESH_INTERVAL, // REMOVED - Incorrect import
     // AI_COLLISION_THRESHOLD_SQ, // REMOVED - Incorrect import
-    BASE_RADIUS_SQ
+    BASE_RADIUS_SQ,
+    WATER_ZONE
 } from "../config/constants";
 
 // Helper function to calculate squared distance
@@ -28,22 +27,29 @@ const distSq = (x1: number, y1: number, x2: number, y2: number): number => {
     return dx * dx + dy * dy;
 };
 
+// Factor to look ahead for road prediction
+const PREDICTION_LOOKAHEAD_FACTOR = 12;
+
 // Define type for velocity maps for clarity
-type PlayerVelocity = { vx: number, vy: number };
+type PlayerVelocity = { vx: number; vy: number };
 
 /**
  * Updates an AI player's position and heading based on game state.
  * Determines target, calculates velocity, and applies movement.
  * Modifies the player state and velocity object directly.
+ * Calculates the potential next position BEFORE applying it.
+ * Uses the predicted road status from the PREVIOUS tick to determine speed for THIS tick.
+ * Calculates a slightly further prediction for the road check.
+ * @returns The predicted next position FOR THE ROAD CHECK { nextX: number, nextY: number }.
  */
 export function updateAIState(
     aiPlayer: Player,
     sessionId: string,
     velocity: PlayerVelocity,
     state: ArenaState,
-    isOnRoad: boolean,
+    predictedIsOnRoadFromLastTick: boolean, // RECEIVED from cache
     dt: number
-): void {
+): { nextX: number; nextY: number } { // RETURN predicted next pos FOR ROAD CHECK
     let targetX: number | null = null;
     let targetY: number | null = null;
     let targetFound = false;
@@ -103,70 +109,91 @@ export function updateAIState(
     // 2. Calculate Desired Velocity
     let targetVelX = 0;
     let targetVelY = 0;
-    let targetWorldDirX = 0; // For heading
-    let targetWorldDirY = 0; // For heading
+    let targetWorldDirX = 0;
+    let targetWorldDirY = 0;
 
-    // Apply road speed boost if applicable
-    const currentAISpeedLimit = isOnRoad
+    // Apply road speed boost if applicable (using prediction from LAST tick)
+    const currentAISpeedLimit = predictedIsOnRoadFromLastTick
         ? MAX_SPEED * AI_SPEED_MULTIPLIER * ROAD_SPEED_MULTIPLIER
         : MAX_SPEED * AI_SPEED_MULTIPLIER;
 
     if (targetX !== null && targetY !== null) {
-        const dirX = targetX - aiPlayer.x;
-        const dirY = targetY - aiPlayer.y;
-        const dist = Math.sqrt(dirX * dirX + dirY * dirY);
+        const dx = targetX - aiPlayer.x;
+        const dy = targetY - aiPlayer.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist > 0.1) { // Threshold to prevent jittering
-            targetWorldDirX = dirX / dist;
-            targetWorldDirY = dirY / dist;
+        const AI_STOPPING_DISTANCE = 0.1; // Use a small default stopping distance
+        if (dist > AI_STOPPING_DISTANCE) { // Only move if not already at target
+            targetWorldDirX = dx / dist;
+            targetWorldDirY = dy / dist;
             targetVelX = targetWorldDirX * currentAISpeedLimit;
             targetVelY = targetWorldDirY * currentAISpeedLimit;
         }
     }
 
-    // 3. Apply Movement Physics (modify velocity object)
-    // Apply Friction (using FRICTION_FACTOR)
+    // 3. Interpolate Velocity & Apply Friction
     const friction = Math.pow(FRICTION_FACTOR, dt);
     velocity.vx *= friction;
     velocity.vy *= friction;
 
-    // Apply Acceleration (using ACCELERATION * AI_ACCEL_MULTIPLIER)
-    const aiAcceleration = ACCELERATION * AI_ACCEL_MULTIPLIER;
-    const accelX = targetWorldDirX * aiAcceleration * dt;
-    const accelY = targetWorldDirY * aiAcceleration * dt;
+    const lerpFactor = Math.min(ACCELERATION * dt / currentAISpeedLimit, 1.0); // Use base ACCELERATION
+    velocity.vx = lerp(velocity.vx, targetVelX, lerpFactor);
+    velocity.vy = lerp(velocity.vy, targetVelY, lerpFactor);
 
-    velocity.vx += accelX;
-    velocity.vy += accelY;
-
-    // Clamp velocity to the AI's potentially boosted speed limit
-    const currentSpeedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
-    const maxSpeedSq = currentAISpeedLimit * currentAISpeedLimit;
-    if (currentSpeedSq > maxSpeedSq) {
-        const speedReductionFactor = Math.sqrt(maxSpeedSq / currentSpeedSq);
-        velocity.vx *= speedReductionFactor;
-        velocity.vy *= speedReductionFactor;
-    }
-
-    // 4. Update AI Player State (Position & Heading)
-    // Update Position
+    // 4. Calculate ACTUAL Potential Next Position
+    let actualNextX = aiPlayer.x;
+    let actualNextY = aiPlayer.y;
     if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
-        aiPlayer.x += velocity.vx * dt;
-        aiPlayer.y += velocity.vy * dt;
+        actualNextX += velocity.vx * dt;
+        actualNextY += velocity.vy * dt;
     } else {
-        console.warn(`[${sessionId}] Invalid AI velocity (vx:${velocity.vx}, vy:${velocity.vy}), skipping position update.`);
+        console.warn(`[AI ${aiPlayer.name}] Invalid velocity (vx:${velocity.vx}, vy:${velocity.vy}), resetting velocity.`);
         velocity.vx = 0; velocity.vy = 0;
+        actualNextX = aiPlayer.x;
+        actualNextY = aiPlayer.y;
     }
 
-    // Update Heading
+    // 5. Calculate PREDICTED position for NEXT tick's ROAD CHECK (further ahead)
+    let predictedRoadCheckX = aiPlayer.x;
+    let predictedRoadCheckY = aiPlayer.y;
+    if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
+        predictedRoadCheckX += velocity.vx * dt * PREDICTION_LOOKAHEAD_FACTOR;
+        predictedRoadCheckY += velocity.vy * dt * PREDICTION_LOOKAHEAD_FACTOR;
+    } else {
+        // Use current position if velocity invalid
+        predictedRoadCheckX = aiPlayer.x;
+        predictedRoadCheckY = aiPlayer.y;
+    }
+
+    // 6. Check Water Hazard (using ACTUAL predicted position)
+    if (isPointInRectangle(actualNextX, actualNextY, WATER_ZONE)) {
+        console.log(`[AI ${aiPlayer.name}] Hit water hazard! Resetting position and velocity.`);
+        aiPlayer.x = 0; // Reset to origin
+        aiPlayer.y = 0;
+        velocity.vx = 0; // Stop movement
+        velocity.vy = 0;
+        aiPlayer.justReset = true;
+        // Recalculate predictedRoadCheckX/Y after reset
+        predictedRoadCheckX = 0;
+        predictedRoadCheckY = 0;
+    } else {
+        // 7. Update Actual Position (if not in water)
+        aiPlayer.x = actualNextX;
+        aiPlayer.y = actualNextY;
+    }
+
+    // 8. Update Heading
     let targetHeading = aiPlayer.heading;
     if (targetWorldDirX !== 0 || targetWorldDirY !== 0) {
         targetHeading = Math.atan2(targetWorldDirY, targetWorldDirX);
     }
     if (isFinite(targetHeading)) {
-        // Use TURN_SPEED constant for AI turning
-        const turnAmount = TURN_SPEED * dt;
+        const turnAmount = TURN_SPEED * dt; // Use base TURN_SPEED
         aiPlayer.heading = angleLerp(aiPlayer.heading, targetHeading, turnAmount);
     } else {
-        console.warn(`[${sessionId}] Invalid targetHeading (${targetHeading}) for AI, skipping rotation update.`);
+        // Maintain current heading if no target or invalid heading
     }
+
+    // Return the calculated potential next position FOR THE ROAD CHECK
+    return { nextX: predictedRoadCheckX, nextY: predictedRoadCheckY };
 }

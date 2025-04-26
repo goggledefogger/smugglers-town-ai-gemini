@@ -21,8 +21,8 @@ import { getMapFeaturesAtPoint, responseHasRoad } from "./utils/mapApiUtils"; //
 // Define types for internal room state maps
 type PlayerInput = { dx: number, dy: number };
 type PlayerVelocity = { vx: number, vy: number };
-// Define type for road status cache entries
-type RoadStatus = { isOnRoad: boolean, lastQueryTime: number };
+// Define type for road status cache entries - ADDED predictedIsOnRoad
+type RoadStatus = { isOnRoad: boolean, predictedIsOnRoad: boolean | null, lastQueryTime: number };
 
 // Constants for road query
 const ROAD_QUERY_INTERVAL_MS = 500;
@@ -44,8 +44,10 @@ export class ArenaRoom extends Room<ArenaState> {
   private persistentIdToTeam = new Map<string, "Red" | "Blue">();
   // Counter for AI IDs (keep state within the room instance)
   private aiCounter = 1;
-  private playerRoadStatusCache = new Map<string, RoadStatus>(); // <-- Add road status cache
-  private periodicLogTimer = 0; // <-- Timer for periodic logging
+  private playerRoadStatusCache = new Map<string, RoadStatus>();
+  // ADDED: Store predicted positions from the previous tick
+  private playerPredictedPositions = new Map<string, { x: number, y: number }>();
+  private periodicLogTimer = 0;
 
   // --- Lifecycle Methods ---
 
@@ -64,6 +66,7 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.worldOriginLng = SharedConstants.ORIGIN_LNG;
 
     this.playerRoadStatusCache = new Map<string, RoadStatus>();
+    this.playerPredictedPositions = new Map<string, { x: number, y: number }>(); // Initialize new map
 
     this.resetRound(); // Initialize items
 
@@ -193,13 +196,61 @@ export class ArenaRoom extends Room<ArenaState> {
 
     const playerIds = Array.from(this.state.players.keys());
     const now = Date.now();
+    const currentPredictedPositions = new Map<string, { x: number, y: number }>(); // Temp map for this tick's predictions
 
-    // --- Perform Road Status Checks (Throttled) ---
+    // 1. Update Player States (AI and Human) - Uses PREVIOUS tick's prediction for speed
     playerIds.forEach(sessionId => {
         const player = this.state.players.get(sessionId);
-        if (!player) return; // Skip if player left mid-tick
+        if (!player) return;
 
-        const cachedStatus = this.playerRoadStatusCache.get(sessionId) || { isOnRoad: false, lastQueryTime: 0 };
+        let velocity = this.playerVelocities.get(sessionId);
+        if (!velocity) {
+            velocity = { vx: 0, vy: 0 };
+            this.playerVelocities.set(sessionId, velocity);
+        }
+
+        // Get predicted road status from LAST tick's check (from cache)
+        const cachedStatus = this.playerRoadStatusCache.get(sessionId);
+        const predictedIsOnRoadFromLastTick = cachedStatus?.predictedIsOnRoad ?? false; // Default to false
+
+        // Update player's current isOnRoad state for client visuals/info
+        player.isOnRoad = predictedIsOnRoadFromLastTick;
+
+        let predictedPos: { nextX: number, nextY: number }; // Explicitly type here
+
+        if (this.aiPlayers.has(sessionId)) {
+            // --- Update AI --- (Pass prediction from cache)
+            predictedPos = updateAIState(player, sessionId, velocity, this.state, predictedIsOnRoadFromLastTick, dt);
+        } else {
+            // --- Update Human --- (Pass prediction from cache)
+            const input = this.playerInputs.get(sessionId);
+            if (!input) {
+                // Skip if input is missing, maybe set a default prediction?
+                predictedPos = { nextX: player.x, nextY: player.y }; // Default to current if no input
+            } else {
+                 predictedPos = updateHumanPlayerState(player, input, velocity, predictedIsOnRoadFromLastTick, dt);
+            }
+        }
+
+        // Store the PREDICTED position for THIS tick (to be used for the NEXT tick's road check)
+        // Map nextX/nextY to x/y
+        currentPredictedPositions.set(sessionId, { x: predictedPos.nextX, y: predictedPos.nextY });
+
+        // Update schema velocity (after movement calculation)
+        player.vx = velocity.vx;
+        player.vy = velocity.vy;
+    });
+    // Update the room's prediction map for the next tick
+    this.playerPredictedPositions = currentPredictedPositions;
+
+    // 2. Perform Road Status Checks (Throttled) - Uses PREDICTED positions for the check
+    playerIds.forEach(sessionId => {
+        const player = this.state.players.get(sessionId);
+        // Get the predicted position calculated in step 1
+        const predictedPos = this.playerPredictedPositions.get(sessionId);
+        if (!player || !predictedPos) return; // Skip if player left or prediction missing
+
+        const cachedStatus = this.playerRoadStatusCache.get(sessionId) || { isOnRoad: false, predictedIsOnRoad: null, lastQueryTime: 0 };
         const timeSinceLastQuery = now - cachedStatus.lastQueryTime;
 
         if (timeSinceLastQuery > ROAD_QUERY_INTERVAL_MS) {
@@ -207,77 +258,35 @@ export class ArenaRoom extends Room<ArenaState> {
             this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, lastQueryTime: now });
 
             try {
-                // Pass the current world origin from the state to worldToGeo
-                const [lon, lat] = worldToGeo(player.x, player.y, this.state.worldOriginLng, this.state.worldOriginLat);
-                // console.log(`[${player.name}] Triggering road query at ${lat}, ${lon}`); // Debug
+                // Use PREDICTED position for the check
+                const [lon, lat] = worldToGeo(predictedPos.x, predictedPos.y, this.state.worldOriginLng, this.state.worldOriginLat);
+
                 getMapFeaturesAtPoint(lon, lat)
                     .then(apiResponse => {
                         if (apiResponse) {
                             const foundRoad = responseHasRoad(apiResponse);
-                            // Update cache with the actual result
-                            this.playerRoadStatusCache.set(sessionId, { isOnRoad: foundRoad, lastQueryTime: now });
-                        } // No else needed, retain old status on API error
+                            // Update the PREDICTED status in cache for the NEXT tick
+                            this.playerRoadStatusCache.set(sessionId, {
+                                ...cachedStatus, // Keep existing isOnRoad status (based on actual pos from last query)
+                                predictedIsOnRoad: foundRoad,
+                                lastQueryTime: now
+                            });
+                        } // No else needed, retain old predicted status on API error
                     })
                     .catch(err => {
-                        console.error(`[${player.name}] Error during background road query:`, err);
+                        console.error(`[${player.name}] Error during predicted road query:`, err);
+                        // Optionally reset predicted status on error?
+                        // this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, predictedIsOnRoad: null, lastQueryTime: now });
                     });
             } catch (convErr) {
-                console.error(`[${player.name}] Error converting worldToGeo for road query:`, convErr);
+                console.error(`[${player.name}] Error converting predicted worldToGeo for road query:`, convErr);
                 // Reset query time in cache so it retries sooner after conversion error
                 this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, lastQueryTime: 0 });
             }
         }
     });
-    // --- End Road Status Checks ---
 
-    // 1. Update AI Players
-    this.aiPlayers.forEach(aiSessionId => {
-        const aiPlayer = this.state.players.get(aiSessionId);
-        let velocity = this.playerVelocities.get(aiSessionId);
-        if (!aiPlayer) {
-            console.warn(`[Update] AI Player ${aiSessionId} not found in state during update.`);
-            this.aiPlayers.delete(aiSessionId); // Clean up bookkeeping
-            this.playerVelocities.delete(aiSessionId); // Clean up velocity map
-            return;
-        }
-        if (!velocity) { // Ensure velocity map entry exists
-            velocity = { vx: 0, vy: 0 };
-            this.playerVelocities.set(aiSessionId, velocity);
-        }
-        // Get current road status from cache
-        const isOnRoad = this.playerRoadStatusCache.get(aiSessionId)?.isOnRoad ?? false;
-        if (aiPlayer) aiPlayer.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
-        // Pass sessionId and isOnRoad status to updateAIState
-        updateAIState(aiPlayer, aiSessionId, velocity, this.state, isOnRoad, dt);
-        // Update schema with calculated velocity
-        aiPlayer.vx = velocity.vx;
-        aiPlayer.vy = velocity.vy;
-    });
-
-    // 2. Update Human Players
-    playerIds.forEach(sessionId => {
-        if (this.aiPlayers.has(sessionId)) return; // Skip AI
-
-        const player = this.state.players.get(sessionId);
-        const input = this.playerInputs.get(sessionId);
-        let velocity = this.playerVelocities.get(sessionId);
-
-        if (!player || !input) return; // Skip if state inconsistent
-        if (!velocity) { // Ensure velocity map entry exists
-            velocity = { vx: 0, vy: 0 };
-            this.playerVelocities.set(sessionId, velocity);
-        }
-        // Get current road status from cache
-        const isOnRoad = this.playerRoadStatusCache.get(sessionId)?.isOnRoad ?? false;
-        if (player) player.isOnRoad = isOnRoad; // <-- ADDED: Update schema state
-        // Pass isOnRoad status to updateHumanPlayerState
-        updateHumanPlayerState(player, input, velocity, isOnRoad, dt);
-        // Update schema with calculated velocity
-        player.vx = velocity.vx;
-        player.vy = velocity.vy;
-    });
-
-    // 3. Apply Game Rules (after all players have moved)
+    // 3. Apply Game Rules (Pickup, Scoring, Collisions) - Uses updated positions
     checkItemPickup(this.state, playerIds);
     checkScoring(this.state, playerIds);
     checkPlayerCollisionsAndStealing(
@@ -287,14 +296,14 @@ export class ArenaRoom extends Room<ArenaState> {
         now
     );
 
-    // --- Add Round Reset Check HERE ---
+    // 4. Round Reset Check
     const allScored = this.state.items.every(item => item.status === 'scored');
-    if (allScored && this.state.items.length > 0) { // Ensure items exist before checking
-        console.log("[Update] All items scored! Resetting round."); // Added log
+    if (allScored && this.state.items.length > 0) {
+        console.log("[Update] All items scored! Resetting round.");
         this.resetRound();
     }
-    // ---------------------------------
 
+    // 5. Update carried item positions
     updateCarriedItemPosition(this.state);
   }
 

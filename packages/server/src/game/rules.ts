@@ -19,6 +19,19 @@ import { distSq } from "@smugglers-town/shared-utils";
 type PlayerVelocity = { vx: number, vy: number };
 
 /**
+ * Checks if a player is already carrying an item.
+ * @returns boolean - true if the player is already carrying an item, false otherwise.
+ */
+function isPlayerCarryingItem(state: ArenaState, playerId: string): boolean {
+    for (const item of state.items) {
+        if (item.status === 'carried' && item.carrierId === playerId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Checks for item pickups by any player.
  * Modifies the item state if a pickup occurs.
  */
@@ -27,6 +40,11 @@ export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
     for (const sessionId of playerIds) {
         const player = state.players.get(sessionId);
         if (!player) continue;
+
+        // First check if player is already carrying an item
+        if (isPlayerCarryingItem(state, sessionId)) {
+            continue; // Skip if player is already carrying an item
+        }
 
         // Then check against each available/dropped item
         for (const item of state.items) {
@@ -237,6 +255,11 @@ export function checkPlayerCollisionsAndStealing(
                         item.carrierId === p1Id &&
                         currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS)
                     {
+                        // Check if p2 is already carrying an item
+                        if (isPlayerCarryingItem(state, p2Id)) {
+                            continue; // Skip this item if p2 is already carrying an item
+                        }
+
                         carrier = p1;
                         carrierId = p1Id;
                         stealer = p2;
@@ -253,6 +276,11 @@ export function checkPlayerCollisionsAndStealing(
                             item.carrierId === p2Id &&
                             currentTime >= item.lastStealTimestamp + STEAL_COOLDOWN_MS)
                         {
+                            // Check if p1 is already carrying an item
+                            if (isPlayerCarryingItem(state, p1Id)) {
+                                continue; // Skip this item if p1 is already carrying an item
+                            }
+
                             carrier = p2;
                             carrierId = p2Id;
                             stealer = p1;

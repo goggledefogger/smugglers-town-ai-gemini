@@ -56,6 +56,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Fixed local player sprite jitter when camera is following
 - [x] Implemented client-side timer smoothing for smoother countdown display
 - [x] Improved player collision detection accuracy (offset collision point, tuned offset distance)
+- [x] Fixed one-item-at-a-time limit for players (prevented multiple item pickup/stealing)
 
 ## In Progress Tasks
 

@@ -24,6 +24,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Basic server-side AI opponent with simple targeting logic (pursues item carrier or item, returns to base).
 - Basic server-side physics response for player-player collisions (bouncing).
 - Item transfer occurs on any player-player collision (including teammates), respecting cooldown.
+- Enforced one-item-per-player limit: Players can no longer pick up or steal additional items while already carrying one.
 - Location search bar to find and jump to specific map locations (using MapTiler Geocoding).
 - More accurate player-player collision detection (tuned offset collision point).
 

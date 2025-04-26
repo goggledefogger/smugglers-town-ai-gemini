@@ -57,6 +57,7 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Implemented client-side timer smoothing for smoother countdown display
 - [x] Improved player collision detection accuracy (offset collision point, tuned offset distance)
 - [x] Fixed one-item-at-a-time limit for players (prevented multiple item pickup/stealing)
+- [x] Implemented predictive road check: Server predicts player position slightly ahead (using `PREDICTION_LOOKAHEAD_FACTOR`) to query map data, aiming for smoother visual transitions for on/off-road status and speed changes.
 
 ## In Progress Tasks
 

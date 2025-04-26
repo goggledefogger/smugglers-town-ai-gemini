@@ -27,6 +27,7 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Enforced one-item-per-player limit: Players can no longer pick up or steal additional items while already carrying one.
 - Location search bar to find and jump to specific map locations (using MapTiler Geocoding).
 - More accurate player-player collision detection (tuned offset collision point).
+- Predictive Road Check: Server anticipates player movement to provide slightly earlier on/off-road status updates for smoother visual feedback.
 
 ### Planned / Future
 - Client-side prediction for improved input responsiveness.
@@ -219,4 +220,9 @@ Adding new interactive elements (e.g., different pickups, obstacles, capture poi
     *   **Lifecycle (`onLeave`, etc.):** Handle cases where a player carrying/interacting with the element leaves the game.
 
 3.  **Implement Client Rendering (`client/src/features/GameCanvas.tsx`):**
-    *   **Create Sprite Placeholder (`setupPixi` in `useEffect`
+    *   **Create Sprite Placeholder (`setupPixi` in `useEffect`)
+
+**Predictive Road Check:**
+*   **How it works:** To improve the timing of visual feedback (like dust trails and speed boosts) when moving between roads and off-road areas, the server performs a *predictive* check. In each tick, it calculates where the player is *likely* to be slightly ahead in time (controlled by `PREDICTION_LOOKAHEAD_FACTOR` in the player controllers). It uses this predicted future position to query the map service for road data *before* the player actually arrives there. The result of this query (whether the *predicted* location is on a road) is then used in the *next* tick to determine the player's speed limit and `isOnRoad` status.
+*   **Current Value:** The `PREDICTION_LOOKAHEAD_FACTOR` is currently set quite high (e.g., 12 in the controllers) for experimentation, significantly anticipating movement.
+*   **Limitations & Improvements:** While this server-side prediction helps, there's still a small inherent delay due to the asynchronous nature of the map query. For truly instant visual feedback precisely aligned with the player's actions, implementing client-side prediction (CSP) would be necessary. CSP involves the client predicting its own movement and road status changes locally before confirming with the server.

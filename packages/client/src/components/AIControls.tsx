@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Player } from '@smugglers-town/shared-schemas';
-import { MapSchema } from '@colyseus/schema';
 
 interface AIControlsProps {
   onAddAi: (team: 'Red' | 'Blue') => void;
-  players: MapSchema<Player>;
+  players: Map<string, Player>;
   localPlayerTeam?: 'Red' | 'Blue' | 'none';
 }
 
@@ -18,7 +17,7 @@ const AIControls: React.FC<AIControlsProps> = ({ onAddAi, players, localPlayerTe
       Blue: { human: 0, ai: 0 },
     };
     if (players) {
-      players.forEach(player => {
+      players.forEach((player: Player) => {
         if (player.team === 'Red' || player.team === 'Blue') {
           if (player.isAI) {
             counts[player.team].ai++;

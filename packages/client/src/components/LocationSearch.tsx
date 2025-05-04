@@ -4,6 +4,7 @@ import '@maptiler/geocoding-control/style.css';
 import * as maplibregl from 'maplibre-gl';
 import { Room } from 'colyseus.js';
 import { ArenaState } from '@smugglers-town/shared-schemas';
+import { INITIAL_ZOOM } from '../hooks/useMapLibre';
 
 // Define the options interface manually based on the library's requirements
 interface GeocodingControlOptions {
@@ -79,8 +80,7 @@ export const LocationSearch: React.FC<LocationSearchProps> = ({
                         if (mapInstance) {
                             mapInstance.once('moveend', () => {
                                 console.log("[LocationSearch] Control's flyTo animation finished (moveend).");
-                                const desiredZoom = 19;
-                                mapInstance.setZoom(desiredZoom);
+                                mapInstance.setZoom(INITIAL_ZOOM);
                                 if (onNavigationFinished) {
                                     onNavigationFinished();
                                 }

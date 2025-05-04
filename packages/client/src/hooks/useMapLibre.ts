@@ -6,7 +6,7 @@ const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 const MAP_API_BASE_URL = "https://api.maptiler.com/maps/";
 
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
-export const INITIAL_ZOOM = 17; // Keep consistent with previous setting - Reduced from 19
+export const INITIAL_ZOOM = 18; // Zooming in slightly from 17
 
 interface UseMapLibreProps {
     mapContainerRef: React.RefObject<HTMLDivElement>;

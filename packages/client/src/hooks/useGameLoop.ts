@@ -361,7 +361,7 @@ export function useGameLoop({
                             sprite.y = lerp(sprite.y, targetScreenPos.y, lerpFactor);
                         }
                     }
-                    
+
                     // --- Rotation Update (Always applied) ---
                     if (!initialPlacementDone.current) {
                         sprite.rotation = targetRotation;
@@ -390,20 +390,8 @@ export function useGameLoop({
             // Create sprite if it doesn't exist (for remote players)
             if (!sprite && carTextureRef.current) {
               const texture = carTextureRef.current;
-              // Check texture dimensions
-              if (!texture || texture.width === 0 || texture.height === 0) {
-                console.error(
-                  "[useGameLoop] Cannot create remote player sprite: Invalid car texture."
-                );
-                return; // Skip this player if texture invalid
-              }
               sprite = new PIXI.Sprite(texture);
               sprite.anchor.set(0.5);
-
-              // Calculate scale based on desired height and texture height
-              const scale = currentCarHeight / texture.height;
-
-              sprite.scale.set(scale); // Apply uniform scale
 
               sprite.tint = playerState.team === "Red" ? 0xff0000 : 0x0000ff;
               sprite.x = -1000;

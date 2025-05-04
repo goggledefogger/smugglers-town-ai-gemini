@@ -5,18 +5,20 @@
  */
 
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { RED_BASE_POS, BLUE_BASE_POS, PLAYER_EFFECTIVE_RADIUS, PLAYER_COLLISION_RADIUS_SQ } from "@smugglers-town/shared-utils";
+import { RED_BASE_POS, BLUE_BASE_POS, BASE_PLAYER_EFFECTIVE_RADIUS, PLAYER_COLLISION_RADIUS_SQ } from "@smugglers-town/shared-utils";
 import {
-    PICKUP_RADIUS_SQ,
     BASE_RADIUS_SQ,
     STEAL_COOLDOWN_MS,
     ITEM_START_POS,
-    PHYSICS_IMPULSE_MAGNITUDE
 } from "../config/constants";
 import { distSq } from "@smugglers-town/shared-utils";
 
 // Define the velocity type locally
 type PlayerVelocity = { vx: number, vy: number };
+
+// Map to track log timestamps per pair (module scope for persistence)
+const lastLogTimePerPair = new Map<string, number>();
+const LOG_INTERVAL_MS = 100; // Log approximately every 100ms per pair
 
 /**
  * Checks if a player is already carrying an item.
@@ -35,7 +37,7 @@ function isPlayerCarryingItem(state: ArenaState, playerId: string): boolean {
  * Checks for item pickups by any player.
  * Modifies the item state if a pickup occurs.
  */
-export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
+export function checkItemPickup(state: ArenaState, playerIds: string[], effectivePickupRadiusSq: number): void {
     // Iterate through all players first
     for (const sessionId of playerIds) {
         const player = state.players.get(sessionId);
@@ -53,7 +55,7 @@ export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
             }
 
             const dSq = distSq(player.x, player.y, item.x, item.y);
-            if (dSq <= PICKUP_RADIUS_SQ) {
+            if (dSq <= effectivePickupRadiusSq) {
                 console.log(`[${sessionId}] Player ${player.name} picked up item ${item.id}!`);
                 item.status = "carried";
                 item.carrierId = sessionId;
@@ -70,7 +72,7 @@ export function checkItemPickup(state: ArenaState, playerIds: string[]): void {
  * Checks for scoring by any player carrying the item.
  * Modifies score and item state if scoring occurs.
  */
-export function checkScoring(state: ArenaState, playerIds: string[]): void {
+export function checkScoring(state: ArenaState, playerIds: string[], effectivePlayerRadius: number): void {
     // Iterate through all items
     for (const item of state.items) {
         // Only check carried items
@@ -102,8 +104,8 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
         if (targetBasePos && baseTeam) {
             // Calculate front position of the player
             const angle = carrier.heading;
-            const frontOffsetX = Math.cos(angle) * PLAYER_EFFECTIVE_RADIUS;
-            const frontOffsetY = Math.sin(angle) * PLAYER_EFFECTIVE_RADIUS;
+            const frontOffsetX = Math.cos(angle) * effectivePlayerRadius;
+            const frontOffsetY = Math.sin(angle) * effectivePlayerRadius;
             const frontX = carrier.x + frontOffsetX;
             const frontY = carrier.y + frontOffsetY;
 
@@ -152,15 +154,18 @@ export function checkPlayerCollisionsAndStealing(
     state: ArenaState,
     playerIds: string[],
     playerVelocities: Map<string, PlayerVelocity>,
-    currentTime: number
+    currentTime: number,
+    effectivePlayerRadius: number,
+    effectivePlayerCollisionRadiusSq: number,
+    effectiveImpulse: number
 ): CollisionCheckDebugData | null {
     let latestDebugData: CollisionCheckDebugData | null = null;
     const processedPairs = new Set<string>();
 
     // Define the forward offset for the collision check point
-    const COLLISION_OFFSET = PLAYER_EFFECTIVE_RADIUS / 2; // Offset by HALF the radius
-    // New threshold based on sum of radii of offset circles (2 * radius)^2
-    const collisionThresholdSq = 4 * PLAYER_COLLISION_RADIUS_SQ;
+    // const COLLISION_OFFSET = PLAYER_EFFECTIVE_RADIUS / 2; // Offset by HALF the radius // REVERTED BACK TO REMOVED
+    // New threshold based on sum of radii (2 * radius)^2
+    const collisionThresholdSq = effectivePlayerCollisionRadiusSq; // USE effective param
 
     // Iterate through all players as potential colliders
     for (let i = 0; i < playerIds.length; i++) {
@@ -174,46 +179,44 @@ export function checkPlayerCollisionsAndStealing(
             const p2 = state.players.get(p2Id);
             if (!p2) continue;
 
-            // --- Calculate Offset Collision Centers ---
-            const p1OffsetX = Math.cos(p1.heading) * COLLISION_OFFSET;
-            const p1OffsetY = Math.sin(p1.heading) * COLLISION_OFFSET;
-            const p1CollisionX = p1.x + p1OffsetX;
-            const p1CollisionY = p1.y + p1OffsetY;
-
-            const p2OffsetX = Math.cos(p2.heading) * COLLISION_OFFSET;
-            const p2OffsetY = Math.sin(p2.heading) * COLLISION_OFFSET;
-            const p2CollisionX = p2.x + p2OffsetX;
-            const p2CollisionY = p2.y + p2OffsetY;
-            // ---------------------------------------
+            // --- Calculate Offset Collision Centers --- // REVERTED BACK TO REMOVED
+            // const p1OffsetX = Math.cos(p1.heading) * COLLISION_OFFSET;
+            // const p1OffsetY = Math.sin(p1.heading) * COLLISION_OFFSET;
+            // const p1CollisionX = p1.x + p1OffsetX;
+            // const p1CollisionY = p1.y + p1OffsetY;
+            //
+            // const p2OffsetX = Math.cos(p2.heading) * COLLISION_OFFSET;
+            // const p2OffsetY = Math.sin(p2.heading) * COLLISION_OFFSET;
+            // const p2CollisionX = p2.x + p2OffsetX;
+            // const p2CollisionY = p2.y + p2OffsetY;
+            // --------------------------------------- // REVERTED BACK TO REMOVED
 
             // Ensure pair order consistency for the processed set
             const pairKey = p1Id < p2Id ? `${p1Id}-${p2Id}` : `${p2Id}-${p1Id}`;
 
-            // Calculate distance squared between offset centers
-            const dx = p2CollisionX - p1CollisionX;
-            const dy = p2CollisionY - p1CollisionY;
+            // Calculate distance squared between player centers // REVERTED BACK TO CENTER CHECK
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
             const dSq = dx * dx + dy * dy;
 
             // Use a combined radius for collision check - MOVED Threshold calculation above loop
-            // const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
-            // const collisionThresholdSq = combinedRadius * combinedRadius;
+            // const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2; // REMOVED redundant calculation inside loop
+            // const collisionThresholdSq = combinedRadius * combinedRadius; // REMOVED redundant calculation inside loop
 
-            // --- REMOVED LOGGING FOR COLLISION CHECK ---
-            // console.log(`[Collision Check] P1: ${p1Id} (${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}), P2: ${p2Id} (${p2.x.toFixed(2)}, ${p2.y.toFixed(2)}), DistSq: ${dSq.toFixed(2)}, ThresholdSq: ${collisionThresholdSq.toFixed(2)}`);
-            // ----------------------------------------
+            // --- ADDED DEBUG LOGGING (Throttled, Corrected Scope) ---
+            const lastLogTime = lastLogTimePerPair.get(pairKey) || 0;
+            if (dSq > 0 && currentTime >= lastLogTime + LOG_INTERVAL_MS) { // Check time interval
+                console.log(`[Collision Check] P1: ${p1.name}(${p1Id.substring(0,3)}), P2: ${p2.name}(${p2Id.substring(0,3)}), DistSq: ${dSq.toFixed(2)}, ThresholdSq: ${collisionThresholdSq.toFixed(2)}`);
+                lastLogTimePerPair.set(pairKey, currentTime); // Update last log time for this pair
+            }
+            // -------------------------------------------------------
 
-             // --- Prepare Debug Data --- Capture positions used for this check
-             latestDebugData = {
-                p1Id: p1Id,
-                p1X: p1.x,
-                p1Y: p1.y,
-                p2Id: p2Id,
-                p2X: p2.x,
-                p2Y: p2.y
-            };
-             // --------------------------
+            // Store debug data regardless of collision, if needed later
+            latestDebugData = { p1Id, p1X: p1.x, p1Y: p1.y, p2Id, p2X: p2.x, p2Y: p2.y };
 
-            if (dSq > 0 && dSq <= collisionThresholdSq) {
+            // Check if distance is less than combined radius (squared)
+            // REVERTED: if (dSq > 0 && dSq <= collisionThresholdSq) {
+            if (dSq <= collisionThresholdSq) { // Use effective threshold
                 // Collision detected!
 
                 // --- Apply physics impulse --- (Only if not already processed this tick)
@@ -226,11 +229,18 @@ export function checkPlayerCollisionsAndStealing(
                     const p2Vel = playerVelocities.get(p2Id);
 
                     if (p1Vel && p2Vel) {
-                        // Apply impulse (equal and opposite)
-                        p1Vel.vx -= nx * PHYSICS_IMPULSE_MAGNITUDE;
-                        p1Vel.vy -= ny * PHYSICS_IMPULSE_MAGNITUDE;
-                        p2Vel.vx += nx * PHYSICS_IMPULSE_MAGNITUDE;
-                        p2Vel.vy += ny * PHYSICS_IMPULSE_MAGNITUDE;
+                        // Apply impulse to velocity (for next frame)
+                        p1Vel.vx -= nx * effectiveImpulse;
+                        p1Vel.vy -= ny * effectiveImpulse;
+                        p2Vel.vx += nx * effectiveImpulse;
+                        p2Vel.vy += ny * effectiveImpulse;
+
+                        // ADDED: Apply small immediate positional nudge
+                        const NUDGE_FACTOR = 0.1; // Small factor of the radius
+                        p1.x -= nx * effectivePlayerRadius * NUDGE_FACTOR;
+                        p1.y -= ny * effectivePlayerRadius * NUDGE_FACTOR;
+                        p2.x += nx * effectivePlayerRadius * NUDGE_FACTOR;
+                        p2.y += ny * effectivePlayerRadius * NUDGE_FACTOR;
 
                         // Mark this pair as processed for physics this tick
                         processedPairs.add(pairKey);

@@ -62,6 +62,33 @@ Core gameplay loop and networking implementation for a real-time multiplayer gam
 - [x] Improved player collision detection accuracy (offset collision point, tuned offset distance)
 - [x] Fixed one-item-at-a-time limit for players (prevented multiple item pickup/stealing)
 - [x] Implemented predictive road check: Server predicts player position slightly ahead (using `PREDICTION_LOOKAHEAD_FACTOR`) to query map data, aiming for smoother visual transitions for on/off-road status and speed changes.
+- [x] Removed offset player collision logic in favor of simpler center-to-center checks (`rules.ts`).
+
+## Gameplay Tuning & Zoom Independence (Post-Road Check Removal)
+
+Tracking parameters and ensuring gameplay consistency after disabling road checks and adjusting zoom/speed.
+
+**Parameter Robustness vs. Zoom (`INITIAL_ZOOM`):**
+
+- ✅ `INITIAL_ZOOM` (Client): The control variable.
+- ⚠️ `MAX_SPEED`, `ACCELERATION` (Server): Defined in world units (m/s, m/s²), technically robust. However, gameplay *feel* is highly sensitive to zoom, requiring tuning (Currently 400, 1600 at zoom 17).
+- ✅ `PICKUP_RADIUS_SQ` (Server): World units (m² - currently 4\*4). Robust.
+- ✅ `BASE_RADIUS_SQ` (Server): World units (m² - currently 30\*30). Robust.
+- ✅ `PLAYER_EFFECTIVE_RADIUS` (Shared): World units (m - currently 1.6). Used for collision. Robust.
+- ✅ `PHYSICS_IMPULSE_MAGNITUDE` (Server): World units (currently 5). Robust.
+- ✅ `FRICTION_FACTOR`, `TURN_SPEED` (Server): World units (currently 0.05, 2.5\*PI). Robust.
+- ✅ Location Search Zoom Reset (Client): Uses `INITIAL_ZOOM`. Robust.
+
+**Current Tuning Tasks:**
+
+- [ ] **Playtest Current Settings:** Evaluate gameplay feel with `INITIAL_ZOOM=17`, `MAX_SPEED=400`, `ACCELERATION=1600`, `PICKUP_RADIUS_SQ=16`, `BASE_RADIUS_SQ=900`, `PHYSICS_IMPULSE_MAGNITUDE=5`, center-to-center collision (`PLAYER_EFFECTIVE_RADIUS=1.6`).
+    - [ ] Speed Feel: Is it comfortable and controllable?
+    - [ ] Pickup Difficulty: Is the pickup radius (4m) appropriate for the speed?
+    - [ ] Scoring Difficulty: Is the base radius (30m) appropriate for the speed?
+    - [ ] Collision Feel: How do player-player collisions feel with radius 1.6m and impulse 5?
+    - [ ] Handling Feel: Adjust `FRICTION_FACTOR` / `TURN_SPEED` if needed.
+- [ ] **Optional:** Revisit road logic if lack of speed boost is detrimental.
+- [ ] **Cleanup:** Remove commented-out road check code in `ArenaRoom.ts` if current state is stable.
 
 ## In Progress Tasks
 

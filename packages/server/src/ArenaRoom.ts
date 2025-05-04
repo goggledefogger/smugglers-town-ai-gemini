@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as Constants from "./config/constants";
 import * as ServerConstants from "./config/constants"; // Alias server-specific constants
 import * as SharedConstants from "@smugglers-town/shared-utils"; // Correct import for Shared Constants
-import { NUM_ITEMS, lerp, angleLerp, distSq, PLAYER_EFFECTIVE_RADIUS } from "@smugglers-town/shared-utils"; // Import shared utils, including PLAYER_EFFECTIVE_RADIUS
+import { NUM_ITEMS, lerp, angleLerp, distSq } from "@smugglers-town/shared-utils"; // Import shared utils
 import { updateAIState } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
 import {
@@ -189,6 +189,22 @@ export class ArenaRoom extends Room<ArenaState> {
     }
     // -----------------------
 
+    // Calculate Zoom Scale Factor
+    // TODO: Get currentZoom dynamically from client if possible, hardcoding for now
+    const currentZoom = 18; // Hardcoded based on client's INITIAL_ZOOM
+    const zoomScaleFactor = Math.pow(2, ServerConstants.REFERENCE_ZOOM - currentZoom);
+
+    // Calculate Effective Parameters
+    const effectiveMaxSpeed = ServerConstants.BASE_MAX_SPEED * zoomScaleFactor;
+    const effectiveAcceleration = ServerConstants.BASE_ACCELERATION * zoomScaleFactor;
+    const effectivePlayerRadius = SharedConstants.BASE_PLAYER_EFFECTIVE_RADIUS * zoomScaleFactor;
+    const effectivePickupRadius = ServerConstants.BASE_PICKUP_RADIUS * zoomScaleFactor;
+    const effectiveImpulse = ServerConstants.BASE_PHYSICS_IMPULSE_MAGNITUDE * zoomScaleFactor;
+
+    // Recalculate squared radii based on effective values
+    const effectivePlayerCollisionRadiusSq = effectivePlayerRadius * effectivePlayerRadius;
+    const effectivePickupRadiusSq = effectivePickupRadius * effectivePickupRadius;
+
     if (dt > 0.1) {
         console.warn(`Large delta time detected: ${dt.toFixed(3)}s. Skipping frame.`);
         return;
@@ -219,16 +235,33 @@ export class ArenaRoom extends Room<ArenaState> {
         let predictedPos: { nextX: number, nextY: number }; // Explicitly type here
 
         if (this.aiPlayers.has(sessionId)) {
-            // --- Update AI --- (Pass prediction from cache)
-            predictedPos = updateAIState(player, sessionId, velocity, this.state, predictedIsOnRoadFromLastTick, dt);
+            // --- Update AI --- (Pass effective params)
+            predictedPos = updateAIState(
+                player,
+                sessionId,
+                velocity,
+                this.state,
+                predictedIsOnRoadFromLastTick,
+                dt,
+                effectiveMaxSpeed * ServerConstants.AI_SPEED_MULTIPLIER, // Pass effective speed
+                effectiveAcceleration * ServerConstants.AI_ACCEL_MULTIPLIER // Pass effective accel
+            );
         } else {
-            // --- Update Human --- (Pass prediction from cache)
+            // --- Update Human --- (Pass effective params)
             const input = this.playerInputs.get(sessionId);
             if (!input) {
                 // Skip if input is missing, maybe set a default prediction?
                 predictedPos = { nextX: player.x, nextY: player.y }; // Default to current if no input
             } else {
-                 predictedPos = updateHumanPlayerState(player, input, velocity, predictedIsOnRoadFromLastTick, dt);
+                 predictedPos = updateHumanPlayerState(
+                     player,
+                     input,
+                     velocity,
+                     predictedIsOnRoadFromLastTick,
+                     dt,
+                     effectiveMaxSpeed, // Pass effective speed
+                     effectiveAcceleration // Pass effective accel
+                );
             }
         }
 
@@ -299,14 +332,17 @@ export class ArenaRoom extends Room<ArenaState> {
         }
     });
 
-    // 3. Apply Game Rules (Pickup, Scoring, Collisions) - Uses updated positions
-    checkItemPickup(this.state, playerIds);
-    checkScoring(this.state, playerIds);
+    // 3. Apply Game Rules (Pickup, Scoring, Collisions) - Pass effective params
+    checkItemPickup(this.state, playerIds, effectivePickupRadiusSq);
+    checkScoring(this.state, playerIds, effectivePlayerRadius);
     checkPlayerCollisionsAndStealing(
         this.state,
         playerIds,
         this.playerVelocities,
-        now
+        now,
+        effectivePlayerRadius, // Pass effective radius
+        effectivePlayerCollisionRadiusSq, // Pass effective radius sq
+        effectiveImpulse // Pass effective impulse
     );
 
     // 4. Round Reset Check

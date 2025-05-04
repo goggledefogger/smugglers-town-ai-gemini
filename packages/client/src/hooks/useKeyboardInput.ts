@@ -7,10 +7,10 @@ export interface KeyboardInputVector {
 
 // Maintain the mapping of keys to directions
 const keyMap: { [key: string]: { dx: number; dy: number } } = {
-    ArrowUp: { dx: 0, dy: -1 },
-    KeyW: { dx: 0, dy: -1 },
-    ArrowDown: { dx: 0, dy: 1 },
-    KeyS: { dx: 0, dy: 1 },
+    ArrowUp: { dx: 0, dy: 1 },
+    KeyW: { dx: 0, dy: 1 },
+    ArrowDown: { dx: 0, dy: -1 },
+    KeyS: { dx: 0, dy: -1 },
     ArrowLeft: { dx: -1, dy: 0 },
     KeyA: { dx: -1, dy: 0 },
     ArrowRight: { dx: 1, dy: 0 },

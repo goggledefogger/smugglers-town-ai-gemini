@@ -7,22 +7,20 @@
 import { Player, ArenaState } from "@smugglers-town/shared-schemas";
 import { lerp, angleLerp, isPointInRectangle } from "@smugglers-town/shared-utils";
 import {
-    MAX_SPEED,
-    ACCELERATION,
     FRICTION_FACTOR,
     TURN_SPEED,
-    WATER_ZONE,
     ROAD_SPEED_MULTIPLIER,
+    WATER_ZONE,
 } from "../config/constants";
 import * as ServerConstants from "../config/constants";
+
+// Factor to look ahead for road prediction (e.g., 12 means predict 12 * velocity * dt ahead)
+const PREDICTION_LOOKAHEAD_FACTOR = 12;
 
 // Define types for input and velocity maps for clarity
 type PlayerInput = { dx: number, dy: number };
 type PlayerVelocity = { vx: number, vy: number };
 type InputMap = Record<string, boolean>;
-
-// Factor to look ahead for road prediction (e.g., 1.5 means predict 1.5 * dt ahead)
-const PREDICTION_LOOKAHEAD_FACTOR = 12;
 
 // Cache for storing results of road queries (SessionID -> {isOnRoad, lastQueryTime})
 // In a real app, manage this cache more robustly (e.g., in ArenaRoom, handle player leave)
@@ -41,91 +39,63 @@ export function updateHumanPlayerState(
     player: Player,
     input: PlayerInput,
     velocity: PlayerVelocity,
-    predictedIsOnRoadFromLastTick: boolean, // RECEIVED from cache
-    dt: number
-): { nextX: number; nextY: number } { // RETURN predicted next pos FOR ROAD CHECK
+    isOnRoad: boolean,
+    dt: number,
+    effectiveMaxSpeed: number,
+    effectiveAcceleration: number
+): { nextX: number, nextY: number } { // Return predicted position
     const inputDirX = input.dx;
     const inputDirY = input.dy;
-    let magnitude = Math.sqrt(inputDirX * inputDirX + inputDirY * inputDirY);
 
-    let targetWorldDirX = 0;
-    let targetWorldDirY = 0;
-    if (magnitude > 0) {
-        targetWorldDirX = inputDirX / magnitude;
-        targetWorldDirY = -inputDirY / magnitude; // Y-flip
+    // --- Turn towards input direction ---
+    if (inputDirX !== 0 || inputDirY !== 0) {
+        const targetAngle = Math.atan2(inputDirY, inputDirX);
+        let angleDiff = targetAngle - player.heading;
+        // Normalize angle difference to [-PI, PI]
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+        // Apply turn speed
+        const turnAmount = Math.sign(angleDiff) * Math.min(TURN_SPEED * dt, Math.abs(angleDiff));
+        player.heading += turnAmount;
+        // Normalize heading
+        while (player.heading > Math.PI) player.heading -= 2 * Math.PI;
+        while (player.heading < -Math.PI) player.heading += 2 * Math.PI;
     }
 
-    // Apply Friction (using FRICTION_FACTOR)
-    const friction = Math.pow(FRICTION_FACTOR, dt);
-    velocity.vx *= friction;
-    velocity.vy *= friction;
+    // Apply acceleration in the direction the car is facing
+    const facingAngle = player.heading;
+    const accelX = Math.cos(facingAngle) * effectiveAcceleration; // USE effective
+    const accelY = Math.sin(facingAngle) * effectiveAcceleration;
 
-    // --- Road Speed Check (Uses prediction from LAST tick) ---
-    const currentSpeedLimit = predictedIsOnRoadFromLastTick ? MAX_SPEED * ROAD_SPEED_MULTIPLIER : MAX_SPEED;
-
-    // Calculate Target Velocity Vector (Direction * Speed Limit)
-    const targetVelX = targetWorldDirX * currentSpeedLimit;
-    const targetVelY = targetWorldDirY * currentSpeedLimit;
-
-    // Interpolate current velocity towards target velocity
-    const lerpFactor = Math.min(ACCELERATION * dt / currentSpeedLimit, 1.0);
-    velocity.vx = lerp(velocity.vx, targetVelX, lerpFactor);
-    velocity.vy = lerp(velocity.vy, targetVelY, lerpFactor);
-
-    // Calculate ACTUAL potential next position (for this tick's movement)
-    let actualNextX = player.x;
-    let actualNextY = player.y;
-    if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
-        actualNextX += velocity.vx * dt;
-        actualNextY += velocity.vy * dt;
-    } else {
-        console.warn(`[${player.name}] Invalid velocity (vx:${velocity.vx}, vy:${velocity.vy}), resetting velocity.`);
-        velocity.vx = 0; velocity.vy = 0;
-        actualNextX = player.x; // Use current position if velocity invalid
-        actualNextY = player.y;
+    // Only apply acceleration if there is input (magnitude > threshold?)
+    if (inputDirX !== 0 || inputDirY !== 0) { // Simple check for any input
+         velocity.vx += accelX * dt;
+         velocity.vy += accelY * dt;
     }
 
-    // Calculate PREDICTED position for NEXT tick's ROAD CHECK (further ahead)
-    let predictedRoadCheckX = player.x;
-    let predictedRoadCheckY = player.y;
-    if (isFinite(velocity.vx) && isFinite(velocity.vy)) {
-        predictedRoadCheckX += velocity.vx * dt * PREDICTION_LOOKAHEAD_FACTOR;
-        predictedRoadCheckY += velocity.vy * dt * PREDICTION_LOOKAHEAD_FACTOR;
-    } else {
-        // Use current position if velocity invalid
-        predictedRoadCheckX = player.x;
-        predictedRoadCheckY = player.y;
+    // Apply friction (drag)
+    velocity.vx *= (1 - FRICTION_FACTOR);
+    velocity.vy *= (1 - FRICTION_FACTOR);
+
+    // Clamp velocity to max speed
+    const currentSpeedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+    const currentMaxSpeed = effectiveMaxSpeed * (isOnRoad ? ROAD_SPEED_MULTIPLIER : 1.0); // USE effective
+    const maxSpeedSq = currentMaxSpeed * currentMaxSpeed;
+
+    if (currentSpeedSq > maxSpeedSq) {
+        const speed = Math.sqrt(currentSpeedSq);
+        velocity.vx = (velocity.vx / speed) * currentMaxSpeed;
+        velocity.vy = (velocity.vy / speed) * currentMaxSpeed;
     }
 
-    // Check for Water Hazard Collision using ACTUAL predicted position
-    if (isPointInRectangle(actualNextX, actualNextY, WATER_ZONE)) {
-        console.log(`[${player.name}] Hit water hazard! Resetting position and velocity.`);
-        player.x = 0; // Reset to origin
-        player.y = 0;
-        velocity.vx = 0; // Stop movement
-        velocity.vy = 0;
-        player.justReset = true;
-        // Recalculate predictedRoadCheckX/Y after reset to return correct prediction
-        predictedRoadCheckX = 0;
-        predictedRoadCheckY = 0;
-    } else {
-        // Update ACTUAL player Position only if not in water
-        player.x = actualNextX;
-        player.y = actualNextY;
-    }
+    // Update player position
+    player.x += velocity.vx * dt;
+    player.y += velocity.vy * dt;
 
-    // Update Heading based on input direction
-    let targetHeading = player.heading;
-    if (targetWorldDirX !== 0 || targetWorldDirY !== 0) {
-        targetHeading = Math.atan2(targetWorldDirY, targetWorldDirX);
-    }
-    if (isFinite(targetHeading)) {
-        const turnAmount = TURN_SPEED * dt;
-        player.heading = angleLerp(player.heading, targetHeading, turnAmount);
-    } else {
-        console.warn(`[${player.name}] Invalid targetHeading, skipping rotation.`);
-    }
+    // Calculate the potential next position for the road check
+    const predictedRoadCheckX = player.x + velocity.vx * dt * PREDICTION_LOOKAHEAD_FACTOR;
+    const predictedRoadCheckY = player.y + velocity.vy * dt * PREDICTION_LOOKAHEAD_FACTOR;
 
-    // Return the calculated potential next position FOR THE ROAD CHECK
     return { nextX: predictedRoadCheckX, nextY: predictedRoadCheckY };
 }

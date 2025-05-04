@@ -56,14 +56,15 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
         const setupPixi = async () => {
             try {
                 console.log("[usePixiApp] Initializing PixiJS application...");
+
                 app = new PIXI.Application();
                 pixiRefs.current.app = app;
 
-                await app.init({ 
-                    resizeTo: currentPixiContainer, 
-                    backgroundAlpha: 0, 
-                    resolution: window.devicePixelRatio || 1, 
-                    autoDensity: true, 
+                await app.init({
+                    resizeTo: currentPixiContainer,
+                    backgroundAlpha: 0,
+                    resolution: window.devicePixelRatio || 1,
+                    autoDensity: true,
                     antialias: true // Explicitly enable antialiasing
                 });
                 if (!isMounted.current) return;
@@ -89,10 +90,15 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 const carSprite = new PIXI.Sprite(carTexture);
                 carSprite.anchor.set(0.5);
 
-                // Calculate scale based on desired height and texture height
-                const scale = carHeight / carTexture.height;
-                console.log(`[usePixiApp] Calculated car scale: ${scale} (carHeight=${carHeight})`);
-                carSprite.scale.set(scale); // Apply uniform scale
+                // --- REMOVED Texture Settings for Sharpness ---
+                // carTexture.source.scaleMode = 'nearest'; // No longer needed as we won't scale
+                // ---------------------------------------------
+
+                // --- REMOVED Scaling Logic ---
+                // const scale = carHeight / carTexture.height;
+                // console.log(`[usePixiApp] Calculated car scale: ${scale} (carHeight=${carHeight})`);
+                // carSprite.scale.set(scale); // Apply scale = 1 implicitly now
+                // ---------------------------
 
                 carSprite.x = -1000; carSprite.y = -1000;
                 carSprite.visible = false;

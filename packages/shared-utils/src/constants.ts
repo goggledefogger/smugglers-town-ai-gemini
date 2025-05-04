@@ -3,8 +3,8 @@
 // Base Positions (Meters from Origin) - Used by Server and Client Rendering
 export const BASE_DISTANCE = 200; // meters (Increased from 80)
 export const Y_OFFSET = 0; // Keep bases horizontally aligned for simplicity
-export const RED_BASE_POS = { x: -BASE_DISTANCE, y: Y_OFFSET };
-export const BLUE_BASE_POS = { x: BASE_DISTANCE, y: -Y_OFFSET };
+export const RED_BASE_POS = { x: -150, y: 0 };
+export const BLUE_BASE_POS = { x: 150, y: 0 };
 
 // World Origin Constants (Lng/Lat) - Used for coordinate conversion
 const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC
@@ -19,9 +19,9 @@ export const NUM_ITEMS = 4; // Number of items to spawn each round
 
 // Player Constants - NOTE: Actual physics values are in server/config/constants.ts
 // Player Dimensions (used for physics and rendering hints)
-export const PLAYER_EFFECTIVE_RADIUS = 1.6; // meters (Reduced from 1.8)
-export const PLAYER_COLLISION_RADIUS_SQ = PLAYER_EFFECTIVE_RADIUS * PLAYER_EFFECTIVE_RADIUS; // meters^2 (Used for server collision checks)
-export const CAR_HEIGHT = 75; // Client-side rendering height (pixels, relative to zoom)
+export const BASE_PLAYER_EFFECTIVE_RADIUS = 5.0; // meters (Base value for REFERENCE_ZOOM)
+export const PLAYER_COLLISION_RADIUS_SQ = BASE_PLAYER_EFFECTIVE_RADIUS * BASE_PLAYER_EFFECTIVE_RADIUS; // *NOTE: This calculation is now potentially misleading - will be recalculated on server*
+export const CAR_HEIGHT = 124; // Client-side rendering height (pixels, relative to zoom) - Adjusted from 150
 
 // Game Items / Flags
 export const VISUAL_BASE_RADIUS = 30; // World radius (meters) used for client-side rendering calculation.

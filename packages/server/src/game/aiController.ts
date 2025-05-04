@@ -5,10 +5,8 @@
  */
 
 import { ArenaState, Player } from "@smugglers-town/shared-schemas";
-import { lerp, angleLerp, isPointInRectangle } from "@smugglers-town/shared-utils";
+import { lerp, angleLerp, isPointInRectangle, distSq } from "@smugglers-town/shared-utils";
 import {
-    MAX_SPEED,
-    ACCELERATION,
     FRICTION_FACTOR,
     TURN_SPEED,
     AI_SPEED_MULTIPLIER,
@@ -25,9 +23,10 @@ import {
     getInterceptTarget,
     getDefendTarget
 } from "../ai/aiActions";
+import { RED_BASE_POS, BLUE_BASE_POS } from "@smugglers-town/shared-utils";
 
-// Factor to look ahead for road prediction
-const PREDICTION_LOOKAHEAD_FACTOR = 12;
+// Factor to look ahead for road prediction (e.g., 1.5 means predict 1.5 * dt ahead)
+export const PREDICTION_LOOKAHEAD_FACTOR = 12; // EXPORTED
 
 // Define type for velocity maps for clarity
 type PlayerVelocity = { vx: number; vy: number };
@@ -48,7 +47,9 @@ export function updateAIState(
     velocity: PlayerVelocity,
     state: ArenaState,
     predictedIsOnRoadFromLastTick: boolean, // RECEIVED from cache
-    dt: number
+    dt: number,
+    effectiveMaxSpeed: number,
+    effectiveAcceleration: number
 ): { nextX: number; nextY: number } { // RETURN predicted next pos FOR ROAD CHECK
 
     // --- 1. Determine AI State and Target ---
@@ -92,8 +93,8 @@ export function updateAIState(
 
     // Apply road speed boost if applicable (using prediction from LAST tick)
     const currentAISpeedLimit = predictedIsOnRoadFromLastTick
-        ? MAX_SPEED * AI_SPEED_MULTIPLIER * ROAD_SPEED_MULTIPLIER
-        : MAX_SPEED * AI_SPEED_MULTIPLIER;
+        ? effectiveMaxSpeed * AI_SPEED_MULTIPLIER * ROAD_SPEED_MULTIPLIER
+        : effectiveMaxSpeed * AI_SPEED_MULTIPLIER;
 
     if (targetX !== null && targetY !== null) {
         const dx = targetX - aiPlayer.x;
@@ -112,12 +113,22 @@ export function updateAIState(
     } // else: No target, targetVel remains 0
 
     // 3. Interpolate Velocity & Apply Friction
-    const friction = Math.pow(FRICTION_FACTOR, dt);
-    velocity.vx *= friction;
-    velocity.vy *= friction;
+    velocity.vx *= (1 - FRICTION_FACTOR);
+    velocity.vy *= (1 - FRICTION_FACTOR);
+
+    // Clamp velocity
+    const currentSpeedSq = velocity.vx * velocity.vx + velocity.vy * velocity.vy;
+    const currentMaxSpeed = effectiveMaxSpeed * (predictedIsOnRoadFromLastTick ? ROAD_SPEED_MULTIPLIER : 1.0); // USE effectiveMaxSpeed
+    const maxSpeedSq = currentMaxSpeed * currentMaxSpeed;
+
+    if (currentSpeedSq > maxSpeedSq) {
+        console.warn(`[AI ${aiPlayer.name}] Velocity clamped. Current speed: ${Math.sqrt(currentSpeedSq)}, Max speed: ${currentMaxSpeed}`);
+        const scale = currentMaxSpeed / Math.sqrt(currentSpeedSq);
+        velocity.vx *= scale;
+        velocity.vy *= scale;
+    }
 
     // Ensure acceleration logic doesn't break if speed limit is 0 (shouldn't happen often)
-    const effectiveAcceleration = currentAISpeedLimit > 0 ? ACCELERATION * dt / currentAISpeedLimit : 1.0;
     const lerpFactor = Math.min(effectiveAcceleration, 1.0);
 
     velocity.vx = lerp(velocity.vx, targetVelX, lerpFactor);

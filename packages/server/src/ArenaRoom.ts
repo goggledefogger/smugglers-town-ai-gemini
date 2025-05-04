@@ -261,6 +261,8 @@ export class ArenaRoom extends Room<ArenaState> {
                 // Use PREDICTED position for the check
                 const [lon, lat] = worldToGeo(predictedPos.x, predictedPos.y, this.state.worldOriginLng, this.state.worldOriginLat);
 
+                // --- COMMENTED OUT MAPBOX CALL ---
+                /*
                 getMapFeaturesAtPoint(lon, lat)
                     .then(apiResponse => {
                         if (apiResponse) {
@@ -278,6 +280,17 @@ export class ArenaRoom extends Room<ArenaState> {
                         // Optionally reset predicted status on error?
                         // this.playerRoadStatusCache.set(sessionId, { ...cachedStatus, predictedIsOnRoad: null, lastQueryTime: now });
                     });
+                */
+                // --- END COMMENTED OUT ---
+
+                // Since we commented out the API call, let's default predictedIsOnRoad to false
+                // or perhaps maintain the last known value? For now, let's default to false.
+                 this.playerRoadStatusCache.set(sessionId, {
+                    ...cachedStatus,
+                    predictedIsOnRoad: false, // Default to false since we aren't checking
+                    lastQueryTime: now
+                });
+
             } catch (convErr) {
                 console.error(`[${player.name}] Error converting predicted worldToGeo for road query:`, convErr);
                 // Reset query time in cache so it retries sooner after conversion error

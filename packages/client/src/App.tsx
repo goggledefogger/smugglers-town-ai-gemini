@@ -30,7 +30,11 @@ function App() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-white text-lg">Loading...</div>
+      </div>
+    );
   }
 
   return (
@@ -38,9 +42,34 @@ function App() {
       {user ? (
         <GameCanvas />
       ) : (
-        <div style={{ padding: '20px'}}>
-          <h1>Smuggler's Town (Geo-CTF Racer)</h1>
-          <button onClick={handleSignIn}>Play as Guest</button>
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+          <div className="text-center px-4">
+            <h1 className="text-5xl md:text-6xl font-bold text-white mb-4 tracking-tight">
+              Smuggler's Town
+            </h1>
+            <p className="text-xl md:text-2xl text-gray-300 mb-12">
+              Geo-CTF Racer
+            </p>
+            <button
+              onClick={handleSignIn}
+              className="group relative px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white text-lg font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 ease-in-out"
+            >
+              <span className="flex items-center gap-2">
+                Play as Guest
+                <svg
+                  className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-200"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+              </span>
+            </button>
+            <p className="text-gray-500 text-sm mt-8">
+              Click to start playing
+            </p>
+          </div>
         </div>
       )}
     </div>

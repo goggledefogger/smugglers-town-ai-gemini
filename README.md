@@ -202,7 +202,15 @@ The server never calls a paid map API. At room creation it runs **one Overpass A
 ## Deployment
 
 - **Client:** Firebase Hosting serves `packages/client/dist` (`pnpm build`, then `firebase deploy --only hosting`). Set `VITE_COLYSEUS_ENDPOINT` to the deployed server's `wss://` URL **before** building.
-- **Server:** `packages/server/Dockerfile` builds a standalone image (from the repo root: `docker build -f packages/server/Dockerfile -t smugglers-town-server .`). No host is provisioned yet — Fly.io / Railway / Cloud Run all work; set `CLIENT_URL` to the hosted client origin for CORS.
+- **Server:** deliberately **not hosted yet** (avoiding charges). `packages/server/Dockerfile` builds a standalone image (from the repo root: `docker build -f packages/server/Dockerfile -t smugglers-town-server .`). Planned target is Cloud Run when ready; the config that keeps idle cost at ~$0 and makes stateful WebSockets work:
+  ```bash
+  gcloud run deploy smugglers-town-server \
+    --source . --region us-east1 \
+    --min-instances=0 --max-instances=1 \
+    --session-affinity --timeout=3600 \
+    --set-env-vars CLIENT_URL=https://smugglers-town-ai.web.app
+  ```
+  (Requires Blaze/billing enabled on the GCP project. `min-instances=0` scales to zero when nobody's playing; `max-instances=1` keeps all players in the same process — Colyseus rooms are stateful.) After deploying, set `VITE_COLYSEUS_ENDPOINT` to the service's `wss://` URL in `packages/client/.env` and redeploy hosting.
 
 ## Contributing
 

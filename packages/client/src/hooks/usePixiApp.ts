@@ -20,9 +20,6 @@ export interface PixiRefs {
     redBaseSprite: PIXI.Graphics | null;
     blueBaseSprite: PIXI.Graphics | null;
     navigationArrowSprite: PIXI.Graphics | null;
-    // Add debug refs if they are managed here
-    debugCarrierSprite: PIXI.Graphics | null;
-    debugStealerSprite: PIXI.Graphics | null;
 }
 
 // Helper to draw the car sprite (copied from GameCanvas, consider utils)
@@ -37,8 +34,6 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
         redBaseSprite: null,
         blueBaseSprite: null,
         navigationArrowSprite: null,
-        debugCarrierSprite: null,
-        debugStealerSprite: null,
     });
 
     const isMounted = useRef(false);
@@ -100,15 +95,8 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 pixiRefs.current.carSprite = carSprite;
                 console.log("[usePixiApp] Local car sprite added to stage.");
 
-                // Initialize Item Sprites Map (texture preloading done here)
+                // Initialize Item Sprites Map
                 pixiRefs.current.itemSprites.current = new Map<string, PIXI.Sprite>();
-                try {
-                    // Preload the golden toilet SVG if needed, though it seems unused in useGameLoop
-                    await PIXI.Assets.load(ASSET_PATHS.GOLDEN_TOILET_SVG); // <-- USE CONSTANT (Keep preloading for now)
-                    console.log(`[usePixiApp] Item asset loaded: ${ASSET_PATHS.GOLDEN_TOILET_SVG}`); // <-- USE CONSTANT
-                } catch (loadError) {
-                    console.error("[usePixiApp] Failed to preload item sprite texture:", loadError);
-                }
 
                 // Create Base Sprites
                 const redBaseGfx = new PIXI.Graphics();
@@ -120,17 +108,6 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 app.stage.addChild(blueBaseGfx);
                 pixiRefs.current.blueBaseSprite = blueBaseGfx;
                 console.log("[usePixiApp] Base sprite placeholders created.");
-
-                // Create Debug Sprites
-                const carrierDebugGfx = new PIXI.Graphics().circle(0, 0, 8).fill(0xff00ff);
-                carrierDebugGfx.pivot.set(0, 0); carrierDebugGfx.x = -1000; carrierDebugGfx.y = -1000; carrierDebugGfx.visible = false;
-                app.stage.addChild(carrierDebugGfx);
-                pixiRefs.current.debugCarrierSprite = carrierDebugGfx;
-                const stealerDebugGfx = new PIXI.Graphics().circle(0, 0, 6).fill(0x00ffff);
-                stealerDebugGfx.pivot.set(0, 0); stealerDebugGfx.x = -1000; stealerDebugGfx.y = -1000; stealerDebugGfx.visible = false;
-                app.stage.addChild(stealerDebugGfx);
-                pixiRefs.current.debugStealerSprite = stealerDebugGfx;
-                console.log("[usePixiApp] Debug sprites created.");
 
                 // Create Navigation Arrow Sprite
                 const arrowGfx = new PIXI.Graphics();
@@ -178,7 +155,6 @@ export function usePixiApp({ pixiContainerRef, onPixiReady, carHeight }: UsePixi
                 pixiRefs.current = { // Reset refs
                     app: null, carSprite: null, otherPlayerSprites: { current: {} }, itemSprites: { current: new Map() },
                     redBaseSprite: null, blueBaseSprite: null, navigationArrowSprite: null,
-                    debugCarrierSprite: null, debugStealerSprite: null
                 };
             } else if (pixiRefs.current.app) {
                 console.log("[usePixiApp useEffect CLEANUP] Pixi app ref exists but init incomplete, skipping destroy.");

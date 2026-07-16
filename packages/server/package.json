@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node lib/index.js",
     "dev": "nodemon --watch src --ext ts --exec \"tsc && node lib/index.js\"",
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "selfcheck": "tsc -b && node lib/map/selfcheck.js"
   },
   "engines": {
     "node": "20"
@@ -16,6 +17,7 @@
     "@colyseus/monitor": "^0.15.0",
     "@colyseus/schema": "^2.0.0",
     "@smugglers-town/shared-schemas": "workspace:*",
+    "@smugglers-town/shared-utils": "workspace:*",
     "@types/cors": "^2.8.17",
     "colyseus": "^0.15.0",
     "cors": "^2.8.5",

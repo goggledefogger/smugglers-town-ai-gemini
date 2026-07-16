@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { Map } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { ORIGIN_LNG, ORIGIN_LAT } from '@smugglers-town/shared-utils';
 
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 const MAP_API_BASE_URL = "https://api.maptiler.com/maps/";
 
-const INITIAL_CENTER: [number, number] = [-73.985, 40.758]; // Times Square, NYC (Lng, Lat)
+const INITIAL_CENTER: [number, number] = [ORIGIN_LNG, ORIGIN_LAT];
 const INITIAL_ZOOM = 19; // Keep consistent with previous setting
 
 interface UseMapLibreProps {
@@ -61,48 +62,8 @@ export function useMapLibre({
             console.log('[useMapLibre] Map loaded.');
             initialStyleLoaded.current = true; // Mark initial style as loaded
 
-            // Add Water Zone Layer via GeoJSON
-            try {
-                 const waterZoneGeoJsonCoords = [
-                  [-73.99219, 40.75620], // Bottom Left (Lng, Lat)
-                  [-73.99100, 40.75620], // Bottom Right
-                  [-73.99100, 40.75979], // Top Right
-                  [-73.99219, 40.75979], // Top Left
-                  [-73.99219, 40.75620]  // Close loop
-                ];
-
-                // Check if source already exists before adding
-                if (!map.getSource('water-zone-source')) {
-                    map.addSource('water-zone-source', {
-                        'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'geometry': {
-                                'type': 'Polygon',
-                                'coordinates': [waterZoneGeoJsonCoords]
-                            },
-                            'properties': {}
-                        }
-                    });
-                }
-
-                // Check if layer already exists before adding
-                if (!map.getLayer('water-zone-layer')) {
-                    map.addLayer({
-                        'id': 'water-zone-layer',
-                        'type': 'fill',
-                        'source': 'water-zone-source',
-                        'layout': {},
-                        'paint': {
-                            'fill-color': '#0000FF',
-                            'fill-opacity': 0.3,
-                        }
-                    });
-                    console.log('[useMapLibre] Water zone GeoJSON layer added to map.');
-                }
-            } catch (mapLayerError) {
-                console.error("[useMapLibre] Error adding water zone layer to map:", mapLayerError);
-            }
+            // Water hazards now come from real OSM water polygons (server-side);
+            // the basemap already renders real water, so no overlay layer needed.
 
             // Call the onMapLoad callback if provided
             if (onMapLoad) {
@@ -156,47 +117,6 @@ export function useMapLibre({
              map.setZoom(zoom);
              map.setBearing(bearing);
              map.setPitch(pitch);
-
-            // Re-add the water zone layer (logic similar to initial load)
-            try {
-                 const waterZoneGeoJsonCoords = [
-                  [-73.99219, 40.75620],
-                  [-73.99100, 40.75620],
-                  [-73.99100, 40.75979],
-                  [-73.99219, 40.75979],
-                  [-73.99219, 40.75620]
-                ];
-
-                if (!map.getSource('water-zone-source')) {
-                     map.addSource('water-zone-source', {
-                        'type': 'geojson',
-                        'data': {
-                            'type': 'Feature',
-                            'geometry': {
-                                'type': 'Polygon',
-                                'coordinates': [waterZoneGeoJsonCoords]
-                            },
-                            'properties': {}
-                        }
-                    });
-                 }
-
-                if (!map.getLayer('water-zone-layer')) {
-                    map.addLayer({
-                        'id': 'water-zone-layer',
-                        'type': 'fill',
-                        'source': 'water-zone-source',
-                        'layout': {},
-                        'paint': {
-                            'fill-color': '#0000FF',
-                            'fill-opacity': 0.3,
-                        }
-                    });
-                     console.log('[useMapLibre] Water zone re-added after style change.');
-                 }
-             } catch (mapLayerError) {
-                 console.error("[useMapLibre] Error re-adding water zone layer after style change:", mapLayerError);
-            }
         });
 
     }, [currentMapStyleId]); // Run only when currentMapStyleId changes

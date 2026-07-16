@@ -10,10 +10,10 @@ import {
     PICKUP_RADIUS_SQ,
     BASE_RADIUS_SQ,
     STEAL_COOLDOWN_MS,
-    ITEM_START_POS,
     PHYSICS_IMPULSE_MAGNITUDE
 } from "../config/constants";
 import { distSq } from "@smugglers-town/shared-utils";
+import { MapData } from "../map/mapData";
 
 // Define the velocity type locally
 type PlayerVelocity = { vx: number, vy: number };
@@ -131,30 +131,17 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
 }
 
 /**
- * Data structure for returning debug info from checkStealing
- */
-interface CollisionCheckDebugData {
-    p1Id: string;
-    p1X: number;
-    p1Y: number;
-    p2Id: string;
-    p2X: number;
-    p2Y: number;
-}
-
-/**
  * Checks for item stealing AND handles basic collision physics between players.
  * Modifies the item state if a steal occurs.
- * Modifies player velocities on collision.
- * @returns CollisionCheckDebugData | null - Returns position data if a distance check was performed, null otherwise.
+ * Modifies player velocities and positions on collision.
  */
 export function checkPlayerCollisionsAndStealing(
     state: ArenaState,
     playerIds: string[],
     playerVelocities: Map<string, PlayerVelocity>,
-    currentTime: number
-): CollisionCheckDebugData | null {
-    let latestDebugData: CollisionCheckDebugData | null = null;
+    currentTime: number,
+    mapData: MapData | null
+): void {
     const processedPairs = new Set<string>();
 
     // Define the forward offset for the collision check point
@@ -190,33 +177,19 @@ export function checkPlayerCollisionsAndStealing(
             const pairKey = p1Id < p2Id ? `${p1Id}-${p2Id}` : `${p2Id}-${p1Id}`;
 
             // Calculate distance squared between offset centers
-            const dx = p2CollisionX - p1CollisionX;
-            const dy = p2CollisionY - p1CollisionY;
-            const dSq = dx * dx + dy * dy;
+            let dx = p2CollisionX - p1CollisionX;
+            let dy = p2CollisionY - p1CollisionY;
+            let dSq = dx * dx + dy * dy;
 
-            // Use a combined radius for collision check - MOVED Threshold calculation above loop
-            // const combinedRadius = PLAYER_EFFECTIVE_RADIUS * 2;
-            // const collisionThresholdSq = combinedRadius * combinedRadius;
+            // Degenerate case: exactly coincident centers. Separate along a fixed axis.
+            if (dSq === 0) {
+                dx = 1; dy = 0; dSq = 1e-6;
+            }
 
-            // --- REMOVED LOGGING FOR COLLISION CHECK ---
-            // console.log(`[Collision Check] P1: ${p1Id} (${p1.x.toFixed(2)}, ${p1.y.toFixed(2)}), P2: ${p2Id} (${p2.x.toFixed(2)}, ${p2.y.toFixed(2)}), DistSq: ${dSq.toFixed(2)}, ThresholdSq: ${collisionThresholdSq.toFixed(2)}`);
-            // ----------------------------------------
-
-             // --- Prepare Debug Data --- Capture positions used for this check
-             latestDebugData = {
-                p1Id: p1Id,
-                p1X: p1.x,
-                p1Y: p1.y,
-                p2Id: p2Id,
-                p2X: p2.x,
-                p2Y: p2.y
-            };
-             // --------------------------
-
-            if (dSq > 0 && dSq <= collisionThresholdSq) {
+            if (dSq <= collisionThresholdSq) {
                 // Collision detected!
 
-                // --- Apply physics impulse --- (Only if not already processed this tick)
+                // --- Apply physics impulse + positional separation --- (Once per pair per tick)
                 if (!processedPairs.has(pairKey)) {
                     const dist = Math.sqrt(dSq);
                     const nx = dx / dist;
@@ -232,10 +205,17 @@ export function checkPlayerCollisionsAndStealing(
                         p2Vel.vx += nx * PHYSICS_IMPULSE_MAGNITUDE;
                         p2Vel.vy += ny * PHYSICS_IMPULSE_MAGNITUDE;
 
+                        // Separate overlapping cars so they don't re-collide every tick
+                        // or tunnel through each other at speed.
+                        const overlap = 2 * PLAYER_EFFECTIVE_RADIUS - dist;
+                        if (overlap > 0) {
+                            const push = overlap / 2 + 0.01;
+                            moveClamped(p1, p1.x - nx * push, p1.y - ny * push, mapData);
+                            moveClamped(p2, p2.x + nx * push, p2.y + ny * push, mapData);
+                        }
+
                         // Mark this pair as processed for physics this tick
                         processedPairs.add(pairKey);
-
-                        // console.log(`Collision Detected: ${p1.name} & ${p2.name}. Impulse applied.`); // Debug log
                     } else {
                          console.warn(`Collision detected but velocity missing for ${p1Id} or ${p2Id}`);
                     }
@@ -305,9 +285,20 @@ export function checkPlayerCollisionsAndStealing(
             }
         }
     }
+}
 
-    // If loop completes without collision/steal, return the debug data from the last distance check performed (or null if no checks)
-    return latestDebugData;
+/**
+ * Moves a player to (nx, ny), clamped so separation can't shove them through a building wall.
+ */
+function moveClamped(player: Player, nx: number, ny: number, mapData: MapData | null): void {
+    const hit = mapData?.sweepBuilding(player.x, player.y, nx, ny);
+    if (hit) {
+        player.x = hit.hitX;
+        player.y = hit.hitY;
+    } else {
+        player.x = nx;
+        player.y = ny;
+    }
 }
 
 /**
@@ -325,15 +316,14 @@ export function updateCarriedItemPosition(state: ArenaState): void {
             item.x = carrier.x;
             item.y = carrier.y;
         } else {
-            // Carrier disconnected or removed - drop the item
+            // Carrier disconnected or removed - drop the item at its last tracked
+            // position (updated every tick above), falling back to origin.
             console.warn(`Carried item position update: Carrier ${item.carrierId} for item ${item.id} not found. Dropping item.`);
             item.status = 'dropped';
-            // Position was likely already NaN, but setting it helps clarify intent?
-            // We need a valid position though! Try to guess based on last known good spot?
-            // For now, dropping at origin as a fallback.
-            // TODO: Store last known good position before carrier disconnect?
-            item.x = 0;
-            item.y = 0;
+            if (!isFinite(item.x) || !isFinite(item.y)) {
+                item.x = 0;
+                item.y = 0;
+            }
             item.carrierId = null;
         }
     });

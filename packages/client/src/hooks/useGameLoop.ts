@@ -573,11 +573,6 @@ export function useGameLoop({
             }
         });
 
-        // --- Update Debug Sprites ---
-         if (refs.debugCarrierSprite && refs.debugStealerSprite) {
-            // ... (debug sprite logic - might use localPlayerState) ...
-         }
-
         // --- Update Navigation Arrow --- (Refactored for multiple items)
         const arrowSprite = refs.navigationArrowSprite;
         const localCarSprite = refs.carSprite;

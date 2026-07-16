@@ -11,3 +11,6 @@ dist
 # TypeScript Build Info
 *.tsbuildinfo
 
+
+# Server map geometry cache (Overpass responses)
+.map-cache/

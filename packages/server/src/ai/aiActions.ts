@@ -65,36 +65,3 @@ export function getReturnToBaseTarget(player: Player, state: ArenaState): Target
   return null;
 }
 
-/**
- * Calculates an intercept point ahead of the opponent carrier.
- * @param player The AI player state.
- * @param state The overall game state.
- * @returns TargetCoordinates for interception, or null.
- */
-export function getInterceptTarget(player: Player, state: ArenaState): TargetCoordinates | null {
-  // TODO: Implement intercept logic (e.g., predict carrier path)
-  // Fallback to simple pursuit for now
-  console.warn("Intercept target requested, falling back to pursue target.");
-  return getPursueCarrierTarget(player, state);
-}
-
-/**
- * Gets the position of the teammate carrying an item (for escorting).
- * @param player The AI player state.
- * @param state The overall game state.
- * @returns TargetCoordinates of the teammate carrier, or null.
- */
-export function getDefendTarget(player: Player, state: ArenaState): TargetCoordinates | null {
-  for (const item of state.items) {
-    if (item.carrierId) {
-      const carrier = state.players.get(item.carrierId);
-      // Find the teammate carrier
-      if (carrier && carrier.team === player.team) {
-        // TODO: Add logic to position defensively (e.g., slightly behind/beside)
-        // For now, just target their exact position.
-        return { x: carrier.x, y: carrier.y };
-      }
-    }
-  }
-  return null; // No teammate carrier found
-}

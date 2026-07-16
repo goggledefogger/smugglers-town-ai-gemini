@@ -129,18 +129,6 @@ export function useColyseus(): UseColyseusReturn {
                 console.log('[useColyseus Post-Join] Manually set initial arenaStateRef and derived state.');
             }
 
-            room.onMessage("water_reset", () => {
-                 if (!isMounted.current) return;
-                 console.log("[useColyseus] Received water_reset message!");
-            });
-
-            room.onMessage('debug_steal_check_positions', (_message) => {
-            });
-
-            room.onMessage('flag_scored', (message) => {
-                console.log('[useColyseus] Received flag_scored:', message);
-            });
-
             room.onLeave((code: number) => {
                 console.log(`[useColyseus] Left room with code: ${code}`);
                 roomRef.current = null;

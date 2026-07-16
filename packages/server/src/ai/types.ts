@@ -1,10 +1,6 @@
 export enum AIState {
   SEEKING_ITEM,
-  PURSUING_CARRIER, // Simple chase
+  PURSUING_CARRIER,
   RETURNING_TO_BASE,
-  INTERCEPTING, // Smarter chase
-  DEFENDING, // Escorting teammate
-  // IDLE // Potential future state
+  // INTERCEPTING / DEFENDING removed as unreachable stubs; see SPEC.md 6a for their planned return.
 }
-
-// Add other AI-specific types or interfaces here if needed later

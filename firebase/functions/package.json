@@ -1,5 +1,6 @@
 {
   "name": "smugglers-town-functions",
+  "//": "npm lockfile here is intentional: deployed independently via the Firebase CLI, outside the pnpm workspace.",
   "description": "Firebase Cloud Functions for Smuggler's Town",
   "scripts": {
     "lint": "eslint --ext .js,.ts .",

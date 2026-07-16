@@ -4,7 +4,7 @@ import { ArenaState, Player, FlagState } from '@smugglers-town/shared-schemas';
 import { Map as MapLibreMap, LngLat } from 'maplibre-gl';
 import { lerp, angleLerp, worldToGeo, geoToWorld } from '@smugglers-town/shared-utils';
 import { PixiRefs } from './usePixiApp';
-import { RED_BASE_POS, BLUE_BASE_POS, distSq, VISUAL_BASE_RADIUS } from "@smugglers-town/shared-utils";
+import { distSq, VISUAL_BASE_RADIUS } from "@smugglers-town/shared-utils";
 import 'pixi.js/gif';
 import { Assets } from 'pixi.js';
 import { GifSprite, GifSource } from 'pixi.js/gif';
@@ -544,10 +544,11 @@ export function useGameLoop({
             }
         });
 
-        // --- Update Base Sprites --- (Copied/adapted from GameCanvas)
+        // --- Update Base Sprites --- (positions come from server state: the
+        // server nudges bases out of buildings/water once map geometry loads)
         const baseSpritesData: { sprite: PIXI.Graphics | null, worldPos: { x: number, y: number }, color: string }[] = [
-            { sprite: refs.redBaseSprite, worldPos: RED_BASE_POS, color: 'Red' },
-            { sprite: refs.blueBaseSprite, worldPos: BLUE_BASE_POS, color: 'Blue' }
+            { sprite: refs.redBaseSprite, worldPos: { x: currentState.redBaseX, y: currentState.redBaseY }, color: 'Red' },
+            { sprite: refs.blueBaseSprite, worldPos: { x: currentState.blueBaseX, y: currentState.blueBaseY }, color: 'Blue' }
         ];
         baseSpritesData.forEach(({ sprite, worldPos, color }) => {
             if (sprite) {
@@ -585,8 +586,10 @@ export function useGameLoop({
             const playerCarryingItem = currentItems.find((item: FlagState) => item.carrierId === currentSessionId);
 
             if (playerCarryingItem) {
-                // Player is carrying: Target own base
-                const basePos = localPlayerState.team === 'Red' ? RED_BASE_POS : BLUE_BASE_POS;
+                // Player is carrying: Target own base (server-synced position)
+                const basePos = localPlayerState.team === 'Red'
+                    ? { x: currentState.redBaseX, y: currentState.redBaseY }
+                    : { x: currentState.blueBaseX, y: currentState.blueBaseY };
                 targetWorldX = basePos.x;
                 targetWorldY = basePos.y;
                 arrowColor = localPlayerState.team === 'Red' ? 0xff0000 : 0x0000ff; // Keep team colors

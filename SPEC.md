@@ -275,6 +275,11 @@ fires, no matter how ready the spec looks.
 
 ### 6a. Road-aware AI
 
+*(Implemented 2026-07 — `map/roadGraph.ts` + `aiController.ts` planning layer.
+Trigger fired early: spec 1 made buildings solid, so straight-line bots
+wedged against walls. Measured: bots on-road 50-58% of samples vs ~13% map
+road coverage.)*
+
 **Build when:** spec 1 has shipped and bots visibly lose to humans who use
 the 2.5× road boost — i.e., roads matter and bots ignore them.
 **Depends on:** spec 1 (`MapData` road segments in flat arrays), spec 4

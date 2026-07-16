@@ -5,7 +5,7 @@
  */
 
 import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
-import { RED_BASE_POS, BLUE_BASE_POS, PLAYER_EFFECTIVE_RADIUS, PLAYER_COLLISION_RADIUS_SQ } from "@smugglers-town/shared-utils";
+import { PLAYER_EFFECTIVE_RADIUS, PLAYER_COLLISION_RADIUS_SQ } from "@smugglers-town/shared-utils";
 import {
     PICKUP_RADIUS_SQ,
     BASE_RADIUS_SQ,
@@ -89,13 +89,13 @@ export function checkScoring(state: ArenaState, playerIds: string[]): void {
             continue;
         }
 
-        let targetBasePos = null;
+        let targetBasePos: { x: number; y: number } | null = null;
         let baseTeam: 'Red' | 'Blue' | null = null;
         if (carrier.team === 'Red') {
-            targetBasePos = RED_BASE_POS;
+            targetBasePos = { x: state.redBaseX, y: state.redBaseY };
             baseTeam = 'Red';
         } else if (carrier.team === 'Blue') {
-            targetBasePos = BLUE_BASE_POS;
+            targetBasePos = { x: state.blueBaseX, y: state.blueBaseY };
             baseTeam = 'Blue';
         }
 

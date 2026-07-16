@@ -52,8 +52,9 @@ export function updateVehicle(
 
     if (mapData?.surfaceAt(nextX, nextY) === 'water') {
         console.log(`[${player.name}] Hit water hazard! Resetting position.`);
-        player.x = 0;
-        player.y = 0;
+        const safe = mapData.findAccessibleNear(0, 0);
+        player.x = safe.x;
+        player.y = safe.y;
         velocity.vx = 0;
         velocity.vy = 0;
         player.justReset = true;

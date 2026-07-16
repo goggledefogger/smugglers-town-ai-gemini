@@ -1,11 +1,11 @@
 import React from 'react';
 
 interface HUDProps {
-  // Props for scores, timer, etc. will be added later
   redScore: number;
   blueScore: number;
   gameTimeRemaining: number | undefined; // Can be undefined initially
-  itemsScoredCount: number; // Replaced itemStatusString
+  itemsScoredCount: number;
+  myTeam?: 'Red' | 'Blue';
 }
 
 // Helper to format seconds into MM:SS
@@ -18,7 +18,7 @@ const formatTime = (totalSeconds: number | undefined): string => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, itemsScoredCount }) => {
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, itemsScoredCount, myTeam }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     display: 'flex',
@@ -65,6 +65,21 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, items
       <div style={itemCountStyle}>
           Items: {itemsScoredCount} / 4 {/* TODO: Get total number from constant/config */}
       </div>
+
+      {/* Your team badge */}
+      {myTeam && (
+        <div style={{
+            fontSize: '0.7em',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            padding: '2px 8px',
+            borderRadius: '9999px',
+            color: myTeam === 'Red' ? '#f87171' : '#60a5fa',
+            border: `1px solid ${myTeam === 'Red' ? '#f87171' : '#60a5fa'}`,
+        }}>
+            YOU
+        </div>
+      )}
     </div>
   );
 };

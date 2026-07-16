@@ -5,7 +5,7 @@ import { ArenaState, Player, FlagState } from "@smugglers-town/shared-schemas";
 import * as ServerConstants from "./config/constants";
 import * as SharedConstants from "@smugglers-town/shared-utils";
 import { NUM_ITEMS } from "@smugglers-town/shared-utils";
-import { updateAIState } from "./game/aiController";
+import { updateAIState, clearAIRuntime } from "./game/aiController";
 import { updateHumanPlayerState } from "./game/playerController";
 import {
     checkItemPickup,
@@ -14,6 +14,7 @@ import {
     updateCarriedItemPosition
 } from "./game/rules";
 import { MapData } from "./map/mapData";
+import { RoadGraph } from "./map/roadGraph";
 
 // Define types for internal room state maps
 type PlayerInput = { dx: number, dy: number };
@@ -39,6 +40,8 @@ export class ArenaRoom extends Room<ArenaState> {
   private aiCounter = 1;
   // Local map geometry (roads/buildings/water). Null = degraded mode (no map physics).
   private mapData: MapData | null = null;
+  // Road network graph for AI routing. Built from mapData when it loads.
+  private roadGraph: RoadGraph | null = null;
   private lastOriginChangeTime = 0;
 
   // --- Lifecycle Methods ---
@@ -65,14 +68,64 @@ export class ArenaRoom extends Room<ArenaState> {
     // Set up the main game loop
     this.setSimulationInterval((deltaTime) => this.update(deltaTime / 1000), 1000 / 60);
 
-    // Load map geometry for collision/road checks. Deliberately NOT awaited:
-    // a cold Overpass fetch for a dense city can take >10s, and awaiting it in
-    // onCreate blocks the first client's join past its matchmaking timeout.
-    // The room starts in degraded mode (no map physics) and upgrades when the
-    // data lands; cached areas load near-instantly on later boots.
+    this.loadMapData();
+  }
+
+  /**
+   * Load map geometry for collision/road checks. Deliberately NOT awaited:
+   * a cold Overpass fetch for a dense city can take >10s, and awaiting it in
+   * onCreate blocks the first client's join past its matchmaking timeout.
+   * The room starts in degraded mode (no map physics) and upgrades when the
+   * data lands; cached areas load near-instantly on later boots.
+   */
+  private loadMapData(): void {
     MapData.load(this.state.worldOriginLng, this.state.worldOriginLat, MAP_RADIUS_M)
-        .then(md => { this.mapData = md; })
+        .then(md => {
+            this.mapData = md;
+            this.roadGraph = RoadGraph.fromMapData(md);
+            this.sanitizePlacements();
+        })
         .catch(err => console.error("[ArenaRoom] Map data load failed; running without map physics:", err));
+  }
+
+  /**
+   * Move bases, loose items, and players out of buildings/water. Runs when
+   * map geometry lands (placements made in degraded mode may be inside
+   * geometry that didn't exist yet).
+   */
+  private sanitizePlacements(): void {
+    const md = this.mapData;
+    if (!md) return;
+
+    const red = md.findAccessibleNear(SharedConstants.RED_BASE_POS.x, SharedConstants.RED_BASE_POS.y);
+    this.state.redBaseX = red.x;
+    this.state.redBaseY = red.y;
+    const blue = md.findAccessibleNear(SharedConstants.BLUE_BASE_POS.x, SharedConstants.BLUE_BASE_POS.y);
+    this.state.blueBaseX = blue.x;
+    this.state.blueBaseY = blue.y;
+
+    this.state.items.forEach(item => {
+        if ((item.status === 'available' || item.status === 'dropped') && isFinite(item.x) && isFinite(item.y)) {
+            const p = md.findAccessibleNear(item.x, item.y);
+            item.x = p.x;
+            item.y = p.y;
+        }
+    });
+
+    this.state.players.forEach(player => {
+        const p = md.findAccessibleNear(player.x, player.y);
+        player.x = p.x;
+        player.y = p.y;
+    });
+  }
+
+  /** Random accessible spawn position within `radius` of (cx, cy). */
+  private accessibleSpawn(cx: number, cy: number, radius: number): { x: number; y: number } {
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * radius;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    return this.mapData ? this.mapData.findAccessibleNear(x, y) : { x, y };
   }
 
   onJoin (client: Client, options: any) {
@@ -167,7 +220,7 @@ export class ArenaRoom extends Room<ArenaState> {
         player.isOnRoad = this.mapData?.isOnRoad(player.x, player.y) ?? false;
 
         if (this.aiPlayers.has(sessionId)) {
-            updateAIState(player, sessionId, velocity, this.state, this.mapData, dt);
+            updateAIState(player, sessionId, velocity, this.state, this.mapData, this.roadGraph, dt);
         } else {
             const input = this.playerInputs.get(sessionId) ?? { dx: 0, dy: 0 };
             updateHumanPlayerState(player, input, velocity, this.mapData, dt);
@@ -245,7 +298,9 @@ export class ArenaRoom extends Room<ArenaState> {
       return;
     }
 
-    const aiSessionId = `ai_${this.aiCounter++}`;
+    // Room id in the key keeps module-scope AI runtime maps (plans, state
+    // memory) collision-free across concurrent rooms.
+    const aiSessionId = `ai_${this.roomId}_${this.aiCounter++}`;
     const aiPlayer = this.createAIPlayer(aiSessionId, team);
 
     this.state.players.set(aiSessionId, aiPlayer);
@@ -315,10 +370,9 @@ export class ArenaRoom extends Room<ArenaState> {
   private createHumanPlayer(sessionId: string, team: "Red" | "Blue"): Player {
     const player = new Player();
     player.name = `Player ${sessionId.substring(0, 3)}`;
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * ServerConstants.PLAYER_SPAWN_RADIUS;
-    player.x = Math.cos(angle) * radius;
-    player.y = Math.sin(angle) * radius;
+    const pos = this.accessibleSpawn(0, 0, ServerConstants.PLAYER_SPAWN_RADIUS);
+    player.x = pos.x;
+    player.y = pos.y;
     player.heading = 0;
     player.team = team;
     return player;
@@ -327,10 +381,9 @@ export class ArenaRoom extends Room<ArenaState> {
   private createAIPlayer(sessionId: string, team: "Red" | "Blue"): Player {
     const player = new Player();
     player.name = `Bot ${this.aiCounter-1} (${team.substring(0,1)})`;
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * ServerConstants.PLAYER_SPAWN_RADIUS;
-    player.x = Math.cos(angle) * radius;
-    player.y = Math.sin(angle) * radius;
+    const pos = this.accessibleSpawn(0, 0, ServerConstants.PLAYER_SPAWN_RADIUS);
+    player.x = pos.x;
+    player.y = pos.y;
     player.heading = 0;
     player.team = team;
     return player;
@@ -388,6 +441,7 @@ export class ArenaRoom extends Room<ArenaState> {
              });
              this.removePlayerState(aiSessionId);
              this.aiPlayers.delete(aiSessionId);
+             clearAIRuntime(aiSessionId);
         });
     }
   }
@@ -398,11 +452,10 @@ export class ArenaRoom extends Room<ArenaState> {
       const newItem = new FlagState();
       newItem.id = itemId;
       newItem.status = 'available';
-      // Random position within spawn radius, nudged out of any building.
-      const angle = Math.random() * Math.PI * 2;
-      const radius = Math.random() * ServerConstants.ITEM_SPAWN_RADIUS;
-      newItem.x = Math.cos(angle) * radius;
-      newItem.y = Math.sin(angle) * radius;
+      // Random position within spawn radius, nudged out of buildings/water.
+      const pos = this.accessibleSpawn(0, 0, ServerConstants.ITEM_SPAWN_RADIUS);
+      newItem.x = pos.x;
+      newItem.y = pos.y;
       newItem.carrierId = null;
       newItem.lastStealTimestamp = 0;
       return newItem;
@@ -424,11 +477,15 @@ export class ArenaRoom extends Room<ArenaState> {
     this.state.worldOriginLng = newOrigin.lng;
 
     // Old geometry is relative to the old origin — drop it and reload.
-    // Game runs in degraded mode (no map physics) until the new data lands.
+    // Game runs in degraded mode (no map physics) until the new data lands;
+    // loadMapData re-sanitizes placements once it does.
     this.mapData = null;
-    MapData.load(newOrigin.lng, newOrigin.lat, MAP_RADIUS_M)
-        .then(md => { this.mapData = md; })
-        .catch(err => console.error("[ArenaRoom] Map data reload failed; continuing without map physics:", err));
+    this.roadGraph = null;
+    this.state.redBaseX = SharedConstants.RED_BASE_POS.x;
+    this.state.redBaseY = SharedConstants.RED_BASE_POS.y;
+    this.state.blueBaseX = SharedConstants.BLUE_BASE_POS.x;
+    this.state.blueBaseY = SharedConstants.BLUE_BASE_POS.y;
+    this.loadMapData();
 
     // 2. Reset Scores and Timer
     this.state.redScore = 0;
@@ -437,11 +494,12 @@ export class ArenaRoom extends Room<ArenaState> {
 
     // 3. Reset Player Positions and States
     this.state.players.forEach((player, sessionId) => {
-        const basePos = player.team === 'Red' ? SharedConstants.RED_BASE_POS : SharedConstants.BLUE_BASE_POS;
-        const angle = Math.random() * Math.PI * 2;
-        const radius = Math.random() * ServerConstants.PLAYER_SPAWN_RADIUS;
-        player.x = basePos.x + Math.cos(angle) * radius;
-        player.y = basePos.y + Math.sin(angle) * radius;
+        const basePos = player.team === 'Red'
+            ? { x: this.state.redBaseX, y: this.state.redBaseY }
+            : { x: this.state.blueBaseX, y: this.state.blueBaseY };
+        const pos = this.accessibleSpawn(basePos.x, basePos.y, ServerConstants.PLAYER_SPAWN_RADIUS);
+        player.x = pos.x;
+        player.y = pos.y;
         player.vx = 0;
         player.vy = 0;
         player.heading = 0;

@@ -43,5 +43,13 @@ export class ArenaState extends Schema {
   // Add base radius for rendering
   @type("number") baseRadius: number = 10; // Default value, server will override
 
+  // Base positions in world meters. Defaults match the shared constants;
+  // the server nudges them onto accessible ground (outside buildings/water)
+  // once map geometry loads, so clients must read these, not the constants.
+  @type("number") redBaseX: number = -200;
+  @type("number") redBaseY: number = 0;
+  @type("number") blueBaseX: number = 200;
+  @type("number") blueBaseY: number = 0;
+
   // Add more state later: bases, game timer, etc.
 }

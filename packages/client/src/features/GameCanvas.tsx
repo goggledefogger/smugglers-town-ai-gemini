@@ -17,6 +17,9 @@ import AIControls from '../components/AIControls';
 import MapStyleSelector from '../components/MapStyleSelector';
 import { LocationSearch } from '../components/LocationSearch';
 import { FloatingPanel } from '../components/FloatingPanel';
+import { WelcomeOverlay } from '../components/WelcomeOverlay';
+
+const WELCOMED_KEY = 'smugglersTown_welcomed';
 
 const API_KEY = import.meta.env.VITE_MAPTILER_API_KEY;
 
@@ -35,6 +38,8 @@ export function GameCanvas() {
     const [showDebug, setShowDebug] = useState(false);
     const [isFollowingPlayer, setIsFollowingPlayer] = useState(true);
     const [hudHeight, setHudHeight] = useState<number>(60);
+    // Session-scoped so a mid-game refresh doesn't re-show the tutorial
+    const [showWelcome, setShowWelcome] = useState(() => !sessionStorage.getItem(WELCOMED_KEY));
 
     // --- Hooks --- (Order can matter)
     const mapInstanceRef = useMapLibre({
@@ -84,6 +89,11 @@ export function GameCanvas() {
         // Re-run if potential height-affecting props change
     }, [scores, gameTimeRemaining, localPlayerTeam, itemsScoredCount]); // Now localPlayerTeam is defined
     // -------------------------------------
+
+    const handleWelcomeDismiss = useCallback(() => {
+        sessionStorage.setItem(WELCOMED_KEY, '1');
+        setShowWelcome(false);
+    }, []);
 
     // --- Memoized Callback for LocationSearch ---
     const handleLocationSelected = useCallback(() => {
@@ -159,6 +169,7 @@ export function GameCanvas() {
                         blueScore={scores.blue}
                         gameTimeRemaining={smoothedGameTime}
                         itemsScoredCount={itemsScoredCount}
+                        myTeam={localPlayerTeam}
                     />
                 </FloatingPanel>
             </div>
@@ -197,6 +208,11 @@ export function GameCanvas() {
                     {colyseusError && <div style={{ marginTop: '0.25rem', color: '#fde047' }}>Error: {colyseusError}</div>}
                 </FloatingPanel>
             </div>
+
+            {/* First-join onboarding */}
+            {showWelcome && isConnected && localPlayerTeam && (
+                <WelcomeOverlay team={localPlayerTeam} onDismiss={handleWelcomeDismiss} />
+            )}
 
             {/* Debug Panel Placeholder */}
             {showDebug && (

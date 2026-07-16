@@ -24,16 +24,34 @@ const OVERPASS_QUERY_TIMEOUT_S = 120;
 const CACHE_DIR = path.join(__dirname, '..', '..', '.map-cache');
 
 // Half-widths in meters by OSM highway class (road counts as "on" within this
-// distance of its centerline). Rough defaults; tune with gameplay feel.
+// distance of its centerline). Tuned generously toward the basemap's rendered
+// width (full right-of-way incl. parking lanes), not nominal lane width —
+// narrower values make the boost cut out while the car still looks on-road.
 const ROAD_HALF_WIDTHS: Record<string, number> = {
-    motorway: 6, trunk: 6, motorway_link: 5, trunk_link: 5,
-    primary: 5, primary_link: 4,
-    secondary: 4, secondary_link: 4,
-    tertiary: 3.5, tertiary_link: 3.5,
-    residential: 3, unclassified: 3, living_street: 3,
-    service: 2, pedestrian: 3,
+    motorway: 10, trunk: 10, motorway_link: 7, trunk_link: 7,
+    primary: 9, primary_link: 6,
+    secondary: 8, secondary_link: 6,
+    tertiary: 6.5, tertiary_link: 6,
+    residential: 5.5, unclassified: 5, living_street: 5,
+    service: 3.5, pedestrian: 5,
 };
-const DEFAULT_ROAD_HALF_WIDTH = 2.5;
+const DEFAULT_ROAD_HALF_WIDTH = 4.5;
+const LANE_WIDTH_M = 3.2;
+
+function roadHalfWidth(tags: Record<string, string>): number {
+    let halfW = ROAD_HALF_WIDTHS[tags.highway] ?? DEFAULT_ROAD_HALF_WIDTH;
+    // Prefer real data when tagged: explicit width, or lane count.
+    const width = parseFloat(tags.width);
+    if (isFinite(width) && width > 0) {
+        halfW = Math.max(halfW, width / 2 + 1);
+    } else {
+        const lanes = parseInt(tags.lanes, 10);
+        if (isFinite(lanes) && lanes > 0) {
+            halfW = Math.max(halfW, (lanes * LANE_WIDTH_M) / 2 + 1.5);
+        }
+    }
+    return halfW;
+}
 // Skip non-drivable ways so sidewalks/trails don't grant the road boost.
 const EXCLUDED_HIGHWAYS = new Set(['footway', 'path', 'steps', 'cycleway', 'bridleway', 'corridor', 'proposed', 'construction']);
 
@@ -61,7 +79,7 @@ export type BuildingHit = { hitX: number; hitY: number; nx: number; ny: number }
  * ponytail: grid instead of an R-tree (flatbush is ESM-only, server is CJS);
  * O(1) lookups over a known bbox — swap in an R-tree if areas ever get huge.
  */
-class Grid {
+export class Grid {
     private cells = new Map<number, number[]>();
     private cols: number;
 
@@ -147,7 +165,7 @@ export class MapData {
 
             if (el.type === 'way' && tags.highway && el.geometry && el.geometry.length >= 2) {
                 if (EXCLUDED_HIGHWAYS.has(tags.highway)) continue;
-                const halfW = ROAD_HALF_WIDTHS[tags.highway] ?? DEFAULT_ROAD_HALF_WIDTH;
+                const halfW = roadHalfWidth(tags);
                 md.maxRoadHalfW = Math.max(md.maxRoadHalfW, halfW);
                 const { xs, ys } = project(el.geometry);
                 for (let i = 0; i < xs.length - 1; i++) {
@@ -202,6 +220,38 @@ export class MapData {
         const idx = this.polygons.length;
         this.polygons.push({ surface, xs, ys, minX, minY, maxX, maxY });
         this.polyGrid.insert(minX, minY, maxX, maxY, idx);
+    }
+
+    /** True if (x, y) is on open ground or road — not inside a building or water. */
+    isAccessible(x: number, y: number): boolean {
+        return this.surfaceAt(x, y) === null;
+    }
+
+    /**
+     * Nearest accessible point to (x, y), sampling outward rings.
+     * Returns the input unchanged if already accessible (or nothing found
+     * within maxRadius — degraded, but never throws).
+     */
+    findAccessibleNear(x: number, y: number, maxRadius = 300): { x: number; y: number } {
+        if (this.isAccessible(x, y)) return { x, y };
+        for (let r = 10; r <= maxRadius; r += 10) {
+            const steps = Math.max(8, Math.ceil((2 * Math.PI * r) / 15));
+            for (let i = 0; i < steps; i++) {
+                const a = (i / steps) * 2 * Math.PI;
+                const px = x + Math.cos(a) * r;
+                const py = y + Math.sin(a) * r;
+                if (this.isAccessible(px, py)) return { x: px, y: py };
+            }
+        }
+        console.warn(`[MapData] No accessible point within ${maxRadius}m of (${x.toFixed(0)}, ${y.toFixed(0)})`);
+        return { x, y };
+    }
+
+    /** Iterate road segment centerlines (for road-graph building). */
+    forEachRoadSegment(cb: (x1: number, y1: number, x2: number, y2: number) => void): void {
+        for (let i = 0; i < this.segX1.length; i++) {
+            cb(this.segX1[i], this.segY1[i], this.segX2[i], this.segY2[i]);
+        }
     }
 
     // --- Queries (hot path: flat meter math only) ---

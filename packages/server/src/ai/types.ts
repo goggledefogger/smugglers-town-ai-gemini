@@ -2,5 +2,6 @@ export enum AIState {
   SEEKING_ITEM,
   PURSUING_CARRIER,
   RETURNING_TO_BASE,
-  // INTERCEPTING / DEFENDING removed as unreachable stubs; see SPEC.md 6a for their planned return.
+  INTERCEPTING, // lead-pursuit of a distant opponent carrier
+  DEFENDING, // escorting a teammate carrier
 }

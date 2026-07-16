@@ -153,3 +153,17 @@ The game uses a server-authoritative architecture with client-side interpolation
 - ✅ `TASKS.md`: This file.
 - ✅ `client/src/components/LocationSearch.tsx`: Renders the MapTiler Geocoding control.
 - ✅ `client/src/components/FloatingPanel.tsx`: Reusable component for consistent floating UI panel styling (transparency, hover).
+
+## July 2026 — Map Collision & AI Overhaul (see SPEC.md)
+
+- [x] Replace Mapbox Tilequery with free local OSM pipeline (Overpass fetch -> disk cache -> meter projection -> grid index)
+- [x] Road speed boost live (2.5x, widths from OSM class + width/lanes tags)
+- [x] Building collision (swept, slide response) and real water hazards
+- [x] Merge human/AI movement into shared updateVehicle()
+- [x] Positional separation in car-car collisions
+- [x] Road-graph A* routing for AI; INTERCEPTING + DEFENDING states; 500ms hysteresis
+- [x] Placement safety: bases/items/spawns nudged onto accessible ground; base positions in schema
+- [x] New-player onboarding overlay + HUD team badge
+- [x] Two-client multiplayer verified (room sharing, team balance, sync, reconnect)
+- [x] Server Dockerfile; MapData/RoadGraph selfcheck (npm run selfcheck)
+- [ ] Provision a server host (Fly/Railway/Cloud Run) and set production VITE_COLYSEUS_ENDPOINT

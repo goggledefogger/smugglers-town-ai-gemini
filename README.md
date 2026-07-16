@@ -21,24 +21,25 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
 - Initial state definition for scores and a single generic pickup item.
 - Server-side collision detection (player-item, player-player, player-base).
 - Core gameplay loop: Generic item pickup, player-vs-player item stealing, scoring by returning the item to team base.
-- Basic server-side AI opponent using a Finite State Machine (`SEEKING_ITEM`, `PURSUING_CARRIER`, `RETURNING_TO_BASE`):
-    - Prioritizes pursuing opponent carriers.
-    - Seeks closest available items if no opponent has one.
-    - Returns to base if it has an item OR if no opponents/items are available (preventing targeting teammates with items).
-- Basic server-side physics response for player-player collisions (bouncing).
+- **Real map collision & physics from free OSM data** (see `SPEC.md` §1): one Overpass API query per room (disk-cached in `packages/server/.map-cache/`), projected to flat meters and indexed in a uniform grid. Per-tick, in-memory lookups (~0.7µs) for:
+    - **Roads**: 2.5× speed boost while on a road (widths from OSM class + `width`/`lanes` tags).
+    - **Buildings**: solid — swept collision with slide-along-wall response (no tunneling).
+    - **Water**: driving in resets you to the start.
+- **Road-aware AI** (`SPEC.md` §6a): bots A* along the actual road network when the boost beats driving straight; FSM states `SEEKING_ITEM`, `PURSUING_CARRIER`, `INTERCEPTING` (velocity-lead pursuit of distant carriers), `DEFENDING` (escorting a teammate carrier), `RETURNING_TO_BASE`, with 500ms hysteresis against state flicker.
+- **Placement safety**: bases, items, spawns, and water-reset points are auto-nudged onto accessible ground (never inside buildings/water). Base positions are server-computed and synced via schema.
+- Server-side physics response for player-player collisions (impulse + positional separation).
 - Item transfer occurs on any player-player collision (including teammates), respecting cooldown.
 - Enforced one-item-per-player limit: Players can no longer pick up or steal additional items while already carrying one.
 - Location search bar to find and jump to specific map locations (using MapTiler Geocoding).
-- More accurate player-player collision detection (tuned offset collision point).
-- Predictive Road Check: Server anticipates player movement to provide slightly earlier on/off-road status updates for smoother visual feedback.
+- **New-player onboarding**: welcome overlay on first join (team, objective, controls, physics tips) plus a persistent team badge in the HUD.
 
 ### Planned / Future
-- Client-side prediction for improved input responsiveness.
-- Simple AI opponents.
-- Improved HUD with game state display (timer, etc.).
+See `SPEC.md` §6 for detailed, implementable specs with "build when" triggers:
+- End-of-game flow (winner screen, auto-reset).
+- Client-side prediction for improved input responsiveness (deferred until real-world latency warrants it).
+- `useGameLoop` refactor and dual camera mode (car-fixed with rotating map).
 - Sound effects.
-- Shared code strategy (monorepo or shared package) to avoid schema duplication.
-- Deployment configuration.
+- Server hosting (client deploys to Firebase Hosting; `packages/server/Dockerfile` is ready for Fly/Railway/Cloud Run — no host provisioned yet).
 
 ## Tech Stack
 
@@ -72,9 +73,8 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
     cd smugglers-town-ai-gemini
     ```
 2.  **Environment Variables:**
-    - Create a `.env` file in the `packages/client/` directory
-    - Create a `.env` file in the `packages/server/` directory
-    - Replace variable values in both
+    - Create a `.env` file in the `packages/client/` directory (Firebase config, `VITE_MAPTILER_API_KEY`, `VITE_COLYSEUS_ENDPOINT` — see `.env.example`)
+    - Create a `.env` file in the `packages/server/` directory (`CLIENT_URL` for CORS; that's all — map data comes from the free Overpass API, no map API key needed)
 3.  **Install Dependencies:**
     - From the **root directory** (`smugglers-town-ai-gemini`), install all dependencies for all packages using `pnpm`:
       ```bash
@@ -82,21 +82,24 @@ A real-time multiplayer web game POC built with React, PixiJS, MapLibre GL JS, a
       ```
 
 ### Running Locally
-1.  **Start the Colyseus Server:**
-    - From the **root directory**, run the server's dev script:
-      ```bash
-      pnpm --filter server dev
-      ```
-    - The server will start (usually on `ws://localhost:2567`) and automatically restart on file changes thanks to `nodemon`.
-2.  **Start the React Client:**
-    - From the **root directory**, run the client's dev script:
-      ```bash
-      pnpm --filter client dev
-      ```
-    - Vite will build the client and provide a local URL `http://localhost:3010`.
-3.  **Open the Game:**
-    - Open the client URL in your web browser.
+1.  **Start everything** (shared-package watchers, Colyseus server with nodemon, Vite client) from the **root directory**:
+    ```bash
+    pnpm dev
+    ```
+    - Server: `ws://localhost:2567` (health check at `http://localhost:2567/health`)
+    - Client: `http://localhost:3010`
+2.  **Open the Game:**
+    - Open `http://localhost:3010` in your web browser.
     - Open a second tab/browser to the same URL to see multiplayer functionality.
+
+> **First run in a new map area:** the server fetches road/building/water geometry from the Overpass API in the background (~17s for dense Manhattan). The game is playable immediately; map physics (road boost, solid buildings, water) activate when the data lands and are instant afterward via the disk cache (`packages/server/.map-cache/`).
+
+### Server self-check
+
+Geometry and pathfinding sanity checks (grid index, point-in-polygon, building sweep, road-graph A*):
+```bash
+cd packages/server && npm run selfcheck
+```
 
 > **Important Note on Shared Packages:** This project uses shared packages (`packages/shared-schemas`, `packages/shared-utils`). If you make changes to the code within these shared packages, you **must** rebuild the specific shared package *before* the changes will be reflected in the `client` or `server`. Use the following command (replace `<package-name>` with the actual package name like `@smugglers-town/shared-utils`):
 >
@@ -191,6 +194,15 @@ Changing the active game location involves coordinating the server's world origi
 6.  **Synchronization:** The client's game loop (`useGameLoop`) now uses the updated `worldOriginLng`/`Lat` from the server state to correctly calculate sprite positions relative to the new map center. Player following resumes, keeping the local player centered in the view at the correct zoom level.
 
 This process ensures that the game simulation remains synchronized with the server's authoritative state while providing a smooth visual transition for the user initiating the change.
+
+## Map Data & Collision
+
+The server never calls a paid map API. At room creation it runs **one Overpass API query** (OpenStreetMap data, free) for the play area's roads, buildings, and water, caches the raw response on disk, projects everything into the game's flat meter space, and answers all per-tick physics questions (`isOnRoad`, `surfaceAt`, `sweepBuilding`) from an in-memory uniform-grid index in under a microsecond each. The AI builds an A* road graph from the same data. Full design and tuning knobs: `SPEC.md` §1 and §6a; implementation: `packages/server/src/map/`.
+
+## Deployment
+
+- **Client:** Firebase Hosting serves `packages/client/dist` (`pnpm build`, then `firebase deploy --only hosting`). Set `VITE_COLYSEUS_ENDPOINT` to the deployed server's `wss://` URL **before** building.
+- **Server:** `packages/server/Dockerfile` builds a standalone image (from the repo root: `docker build -f packages/server/Dockerfile -t smugglers-town-server .`). No host is provisioned yet — Fly.io / Railway / Cloud Run all work; set `CLIENT_URL` to the hosted client origin for CORS.
 
 ## Contributing
 

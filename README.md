@@ -201,16 +201,17 @@ The server never calls a paid map API. At room creation it runs **one Overpass A
 
 ## Deployment
 
-- **Client:** Firebase Hosting serves `packages/client/dist` (`pnpm build`, then `firebase deploy --only hosting`). Set `VITE_COLYSEUS_ENDPOINT` to the deployed server's `wss://` URL **before** building.
-- **Server:** deliberately **not hosted yet** (avoiding charges). `packages/server/Dockerfile` builds a standalone image (from the repo root: `docker build -f packages/server/Dockerfile -t smugglers-town-server .`). Planned target is Cloud Run when ready; the config that keeps idle cost at ~$0 and makes stateful WebSockets work:
-  ```bash
-  gcloud run deploy smugglers-town-server \
-    --source . --region us-east1 \
-    --min-instances=0 --max-instances=1 \
-    --session-affinity --timeout=3600 \
-    --set-env-vars CLIENT_URL=https://smugglers-town-ai.web.app
-  ```
-  (Requires Blaze/billing enabled on the GCP project. `min-instances=0` scales to zero when nobody's playing; `max-instances=1` keeps all players in the same process — Colyseus rooms are stateful.) After deploying, set `VITE_COLYSEUS_ENDPOINT` to the service's `wss://` URL in `packages/client/.env` and redeploy hosting.
+The game is currently deployed to a production VPS at `smugglers.roytown.net` (172.233.128.250).
+
+- **Client:** Firebase Hosting serves `packages/client/dist` (`pnpm build`, then `firebase deploy --only hosting`). Ensure `VITE_COLYSEUS_ENDPOINT` is set to `wss://smugglers.roytown.net` before building.
+- **Server:** Runs as a systemd service (`smugglers.service`) on the VPS. 
+
+**VPS Deployment Runbook:**
+Because the map geometry cache (`.map-cache`) is explicitly excluded from Git to save space, deploying to the VPS requires a manual sync step:
+1. Sync map cache from local to VPS: `scp -r packages/server/.map-cache/* root@172.233.128.250:/var/www/smugglers-town/packages/server/.map-cache/`
+2. SSH into the VPS and pull latest code: `su - webapp -c "cd /var/www/smugglers-town && git pull"`
+3. Rebuild the server: `su - webapp -c "cd /var/www/smugglers-town && pnpm --filter smugglers-town-server build"`
+4. Restart the service (as root): `systemctl restart smugglers.service`
 
 ## Contributing
 

@@ -166,4 +166,4 @@ The game uses a server-authoritative architecture with client-side interpolation
 - [x] New-player onboarding overlay + HUD team badge
 - [x] Two-client multiplayer verified (room sharing, team balance, sync, reconnect)
 - [x] Server Dockerfile; MapData/RoadGraph selfcheck (npm run selfcheck)
-- [ ] Provision a server host (Fly/Railway/Cloud Run) and set production VITE_COLYSEUS_ENDPOINT
+- [x] Provision a server host (Fly/Railway/Cloud Run) and set production VITE_COLYSEUS_ENDPOINT

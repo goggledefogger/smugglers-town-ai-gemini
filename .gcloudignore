@@ -1,0 +1,5 @@
+# Include gitignore rules
+.gitignore
+
+# BUT explicitly include the map-cache so it gets uploaded to Cloud Run!
+!packages/server/.map-cache/

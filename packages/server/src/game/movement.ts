@@ -37,7 +37,7 @@ export function updateVehicle(
     velocity.vx *= friction;
     velocity.vy *= friction;
 
-    const lerpFactor = Math.min(speedLimit > 0 ? opts.accel * dt / speedLimit : 1.0, 1.0);
+    const lerpFactor = Math.min(opts.maxSpeed > 0 ? opts.accel * dt / opts.maxSpeed : 1.0, 1.0);
     velocity.vx = lerp(velocity.vx, targetDir.x * speedLimit, lerpFactor);
     velocity.vy = lerp(velocity.vy, targetDir.y * speedLimit, lerpFactor);
 

@@ -40,6 +40,9 @@ export class ArenaState extends Schema {
   // Multiple items
   @type([ FlagState ]) items = new ArraySchema<FlagState>();
 
+  // Indicates if the map is currently being fetched/loaded from Overpass
+  @type("boolean") mapLoading: boolean = false;
+
   // Add base radius for rendering
   @type("number") baseRadius: number = 10; // Default value, server will override
 

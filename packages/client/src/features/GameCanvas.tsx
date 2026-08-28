@@ -69,6 +69,7 @@ export function GameCanvas() {
         sendInput,
         addAiPlayer,
         arenaStateRef,
+        mapLoading,
     } = colyseusState;
 
     const { inputVector } = useInputManager();
@@ -170,6 +171,7 @@ export function GameCanvas() {
                         gameTimeRemaining={smoothedGameTime}
                         itemsScoredCount={itemsScoredCount}
                         myTeam={localPlayerTeam}
+                        mapLoading={mapLoading}
                     />
                 </FloatingPanel>
             </div>

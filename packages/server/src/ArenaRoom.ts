@@ -79,13 +79,18 @@ export class ArenaRoom extends Room<ArenaState> {
    * data lands; cached areas load near-instantly on later boots.
    */
   private loadMapData(): void {
+    this.state.mapLoading = true;
     MapData.load(this.state.worldOriginLng, this.state.worldOriginLat, MAP_RADIUS_M)
         .then(md => {
             this.mapData = md;
             this.roadGraph = RoadGraph.fromMapData(md);
             this.sanitizePlacements();
+            this.state.mapLoading = false;
         })
-        .catch(err => console.error("[ArenaRoom] Map data load failed; running without map physics:", err));
+        .catch(err => {
+            console.error("[ArenaRoom] Map data load failed; running without map physics:", err);
+            this.state.mapLoading = false;
+        });
   }
 
   /**
@@ -187,6 +192,10 @@ export class ArenaRoom extends Room<ArenaState> {
   // --- Game Loop ---
 
   update(dt: number) {
+    if (this.state.mapLoading) {
+        return; // Pause physics while map loads
+    }
+
     // --- Game Timer Update ---
     if (this.state.gameTimeRemaining > 0) {
       this.state.gameTimeRemaining -= dt;
@@ -481,6 +490,7 @@ export class ArenaRoom extends Room<ArenaState> {
     // loadMapData re-sanitizes placements once it does.
     this.mapData = null;
     this.roadGraph = null;
+    this.state.mapLoading = true;
     this.state.redBaseX = SharedConstants.RED_BASE_POS.x;
     this.state.redBaseY = SharedConstants.RED_BASE_POS.y;
     this.state.blueBaseX = SharedConstants.BLUE_BASE_POS.x;

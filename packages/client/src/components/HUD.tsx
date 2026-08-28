@@ -6,6 +6,7 @@ interface HUDProps {
   gameTimeRemaining: number | undefined; // Can be undefined initially
   itemsScoredCount: number;
   myTeam?: 'Red' | 'Blue';
+  mapLoading?: boolean;
 }
 
 // Helper to format seconds into MM:SS
@@ -18,7 +19,7 @@ const formatTime = (totalSeconds: number | undefined): string => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, itemsScoredCount, myTeam }) => {
+const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, itemsScoredCount, myTeam, mapLoading }) => {
   // Basic styles for positioning and appearance
   const hudStyle: React.CSSProperties = {
     display: 'flex',
@@ -56,8 +57,10 @@ const HUD: React.FC<HUDProps> = ({ redScore, blueScore, gameTimeRemaining, items
     <div style={hudStyle}>
       {/* Display Scores */}
       <div style={blueScoreStyle}>{blueScore}</div>
-      {/* Placeholder Timer */}
-      <div style={timerStyle}>{formatTime(gameTimeRemaining)}</div>
+      {/* Placeholder Timer or Loading State */}
+      <div style={timerStyle}>
+        {mapLoading ? <span style={{fontSize: '0.8em', color: '#fbbf24', animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'}}>LOADING MAP...</span> : formatTime(gameTimeRemaining)}
+      </div>
       {/* Display Scores */}
       <div style={redScoreStyle}>{redScore}</div>
 

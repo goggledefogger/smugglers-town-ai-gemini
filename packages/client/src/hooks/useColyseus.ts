@@ -18,6 +18,7 @@ interface ColyseusHookInternalState {
     isConnected: boolean;
     error: string | null;
     itemsScoredCount: number;
+    mapLoading: boolean;
 }
 
 // Define the shape of the object returned by the hook
@@ -31,6 +32,7 @@ export interface UseColyseusReturn {
     gameTimeRemaining: number | undefined;
     isConnected: boolean;
     error: string | null;
+    mapLoading: boolean;
     sendInput: (input: { dx: number; dy: number }) => void;
     addAiPlayer: (team: 'Red' | 'Blue') => void;
     client: Client | null;
@@ -47,6 +49,7 @@ export function useColyseus(): UseColyseusReturn {
         isConnected: false,
         error: null,
         itemsScoredCount: 0,
+        mapLoading: false,
     });
     const sessionIdRef = useRef<string | null>(null);
     const isMounted = useRef(false);
@@ -107,6 +110,7 @@ export function useColyseus(): UseColyseusReturn {
                     scores: { red: newState.redScore, blue: newState.blueScore },
                     gameTimeRemaining: newState.gameTimeRemaining,
                     itemsScoredCount: scoredCount,
+                    mapLoading: newState.mapLoading,
                 }));
             });
 
@@ -124,7 +128,8 @@ export function useColyseus(): UseColyseusReturn {
                     gameTimeRemaining: initialState.gameTimeRemaining,
                     itemsScoredCount: initialScoredCount,
                     isConnected: prevState.isConnected,
-                    error: prevState.error
+                    error: prevState.error,
+                    mapLoading: initialState.mapLoading,
                 }));
                 console.log('[useColyseus Post-Join] Manually set initial arenaStateRef and derived state.');
             }
@@ -144,6 +149,7 @@ export function useColyseus(): UseColyseusReturn {
                      isConnected: false,
                      error: `Left room (code: ${code})`,
                      itemsScoredCount: 0,
+                     mapLoading: false,
                  });
             });
 
@@ -230,6 +236,7 @@ export function useColyseus(): UseColyseusReturn {
         gameTimeRemaining: internalState.gameTimeRemaining,
         isConnected: internalState.isConnected,
         error: internalState.error,
+        mapLoading: internalState.mapLoading,
         sendInput,
         addAiPlayer,
         client: colyseusClient.current,
